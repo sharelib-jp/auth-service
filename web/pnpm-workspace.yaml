@@ -1,0 +1,16 @@
+allowBuilds:
+  esbuild: true
+  lightningcss: true
+  unrs-resolver: true
+minimumReleaseAgeExclude:
+  - '@tanstack/react-router@1.170.46'
+  - '@tanstack/router-core@1.171.39'
+  - '@tanstack/router-generator@1.167.46'
+  - '@tanstack/router-plugin@1.168.48'
+permissions:
+  '@tanstack/devtools-vite':
+    skills: true
+  '@tanstack/react-router':
+    skills: true
+  '@tanstack/router-plugin':
+    skills: true
