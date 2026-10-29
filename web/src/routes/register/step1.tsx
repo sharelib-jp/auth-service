@@ -9,25 +9,25 @@ import type {
   RegistrationField,
   RegistrationValues,
 } from './-validation'
-import { Heading, HeadingTitle } from '#/components/Heading'
-import { Divider } from '#/components/Divider'
+import { Heading, HeadingTitle } from '#/atoms/Heading'
+import { Divider } from '#/atoms/Divider'
 import {
   FormControlLabel,
   Label,
   RequirementBadge,
   SupportText,
   Legend,
-} from '#/components/FormControlLabel'
-import { Input } from '#/components/Input'
+} from '#/atoms/FormControlLabel'
+import { Input } from '#/atoms/Input'
 import {
   DatePicker,
   DatePickerYear,
   DatePickerMonth,
   DatePickerDate,
-} from '#/components/DatePicker'
-import { Radio } from '#/components/Radio'
-import { Button } from '#/components/Button'
-import { ErrorText } from '#/components/ErrorText'
+} from '#/atoms/DatePicker'
+import { Radio } from '#/atoms/Radio'
+import { Button } from '#/atoms/Button'
+import { ErrorText } from '#/atoms/ErrorText'
 
 export const Route = createFileRoute('/register/step1')({
   component: RouteComponent,

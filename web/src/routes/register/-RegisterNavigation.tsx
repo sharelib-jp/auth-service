@@ -6,17 +6,21 @@ import {
   StepNavigationStep,
   StepNavigationStepHeader,
   StepNavigationTitle,
-} from '../../components/StepNavigation'
+} from '../../atoms/StepNavigation'
 
 type RegisterNavigationProps = {
   currentStep: 1 | 2 | 3
 }
 
-export const RegisterNavigation = ({ currentStep }: RegisterNavigationProps) => {
+export const RegisterNavigation = ({
+  currentStep,
+}: RegisterNavigationProps) => {
   return (
     <div>
       <StepNavigation orientation="horizontal" size="normal">
-        <p className="sr-only">全3ステップ中、{currentStep}ステップ目が進行中</p>
+        <p className="sr-only">
+          全3ステップ中、{currentStep}ステップ目が進行中
+        </p>
         <StepNavigationList>
           <StepNavigationStep
             aria-current={currentStep === 1 ? 'step' : undefined}

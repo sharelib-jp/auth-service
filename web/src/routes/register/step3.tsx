@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Heading, HeadingTitle } from '#/components/Heading'
-import { Button } from '#/components/Button'
+import { Heading, HeadingTitle } from '#/atoms/Heading'
+import { Button } from '#/atoms/Button'
 import { RegisterNavigation } from './-RegisterNavigation'
 
 export const Route = createFileRoute('/register/step3')({

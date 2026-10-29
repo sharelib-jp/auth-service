@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Button } from '#/components/Button'
-import { Heading, HeadingTitle } from '#/components/Heading'
-import { Divider } from '#/components/Divider'
-import { Image, ImageArea } from '#/components/Image'
+import { Button } from '#/atoms/Button'
+import { Heading, HeadingTitle } from '#/atoms/Heading'
+import { Divider } from '#/atoms/Divider'
+import { Image, ImageArea } from '#/atoms/Image'
 import { useState } from 'react'
-import { ErrorText } from '#/components/ErrorText'
+import { ErrorText } from '#/atoms/ErrorText'
 import placeholder from '#/assets/placeholder.png'
 
 export const Route = createFileRoute('/login/')({

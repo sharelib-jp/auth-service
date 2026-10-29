@@ -1,15 +1,15 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
-import { Heading, HeadingTitle } from '#/components/Heading'
-import { Button } from '#/components/Button'
+import { Heading, HeadingTitle } from '#/atoms/Heading'
+import { Button } from '#/atoms/Button'
 import { RegisterNavigation } from './-RegisterNavigation'
 import { useRegistration } from './-RegisterContext'
-import { Image, ImageArea } from '#/components/Image'
+import { Image, ImageArea } from '#/atoms/Image'
 import success from '#/assets/smartphone-success.png'
 import attention from '#/assets/smartphone-attention.png'
 import placeholder from '#/assets/placeholder.png'
 import { useState } from 'react'
 import { validateRegistration } from './-validation'
-import { ErrorText } from '#/components/ErrorText'
+import { ErrorText } from '#/atoms/ErrorText'
 
 export const Route = createFileRoute('/register/step2')({
   component: RouteComponent,

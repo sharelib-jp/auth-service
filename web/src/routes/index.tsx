@@ -1,4 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { Identification } from '#/components/Identification'
 
 export const Route = createFileRoute('/')({
   beforeLoad: async () => {
@@ -32,5 +33,9 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
-  return <div>ログインしています。</div>
+  return (
+    <div>
+      <Identification />
+    </div>
+  )
 }
