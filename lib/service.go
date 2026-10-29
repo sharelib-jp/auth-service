@@ -12,6 +12,7 @@ import (
 type Service struct {
 	db       *gorm.DB
 	webAuthn *webauthn.WebAuthn
+	metadata config.Metadata
 }
 
 func NewService(conf *config.Config, db *gorm.DB) (*Service, error) {
@@ -22,8 +23,10 @@ func NewService(conf *config.Config, db *gorm.DB) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{db: db, webAuthn: wa}, nil
+	return &Service{db: db, webAuthn: wa, metadata: conf.Metadata}, nil
 }
+
+func (s *Service) Metadata() config.Metadata { return s.metadata }
 
 var (
 	ErrInvalidInput    = errors.New("invalid input")

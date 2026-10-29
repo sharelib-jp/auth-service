@@ -7,12 +7,31 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	conf, err := LoadConfig("../config.toml")
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `[ HOST ]
+SCHEME = "http://"
+HOSTNAME = "auth-dev-sharelib.luca.hij1.local.sasakulab.com"
+PORT = ":8080"
+
+[ WEBAUTHN ]
+RP_DISPLAY_NAME = "auth-dev-sharelib.luca.hij1.local.sasakulab.com"
+RP_ORIGIN = "https://auth-dev-sharelib.luca.hij1.local.sasakulab.com"
+
+[ DATABASE ]
+DATABASE_DRIVER = "postgres"
+DATABASE_DSN = "host=localhost port=5432 dbname=auth sslmode=disable"
+`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	conf, err := LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if conf.Origin() != "http://localhost:8080" || conf.DATABASE_DRIVER != "sqlite" || conf.DATABASE_DSN == "" {
-		t.Fatalf("invalid development config: %+v", conf)
+	if conf.SCHEME != "http://" || conf.HOSTNAME != "auth-dev-sharelib.luca.hij1.local.sasakulab.com" || conf.PORT != ":8080" ||
+		conf.WEBAUTHN_RP_DISPLAY_NAME != conf.HOSTNAME || conf.Origin() != "https://"+conf.HOSTNAME ||
+		conf.DATABASE_DRIVER != "postgres" || conf.DATABASE_DSN != "host=localhost port=5432 dbname=auth sslmode=disable" {
+		t.Fatal("sectioned config was not loaded correctly")
 	}
 }
 

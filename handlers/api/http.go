@@ -46,11 +46,15 @@ func RegisterRoutes(api *gin.RouterGroup, service *lib.Service, origin string) {
 
 func (s *handler) registerRoutes(api *gin.RouterGroup) {
 	api.GET("", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
+
 	api.POST("/auth/register/begin", s.beginRegistration)
 	api.POST("/auth/register/finish", s.finishRegistration)
 	api.POST("/auth/login/begin", s.beginLogin)
 	api.POST("/auth/login/finish", s.finishLogin)
 	api.POST("/auth/logout", s.requireAuth, s.logout)
+
+	wellKnown := api.Group("/.well-known")
+	wellKnown.GET("/nodeinfo", s.Nodeinfo)
 
 	users := api.Group("/users/me", s.requireAuth)
 	users.GET("", s.getUser)
