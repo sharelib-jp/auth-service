@@ -4,9 +4,10 @@ import (
 	"encoding/base64"
 	"errors"
 
+	"github.com/sharelib-jp/auth-service/models"
+
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
-	"github.com/sharelib-jp/auth-service/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

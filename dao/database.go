@@ -3,12 +3,21 @@ package dao
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"time"
 
 	"github.com/sharelib-jp/auth-service/models"
+
+	"github.com/sharelib-jp/auth-service/internal/audit"
+	"github.com/sharelib-jp/auth-service/internal/consent"
+
+	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
 var ErrLibraryIdExhausted = errors.New("LibraryId range exhausted")
@@ -29,7 +38,9 @@ func OpenWithDriver(driver, dsn string) (*gorm.DB, error) {
 	default:
 		return nil, fmt.Errorf("unsupported database driver %q", driver)
 	}
-	db, err := gorm.Open(dialector, &gorm.Config{TranslateError: true})
+	db, err := gorm.Open(dialector, &gorm.Config{TranslateError: true, Logger: logger.New(log.New(os.Stderr, "", log.LstdFlags), logger.Config{
+		SlowThreshold: time.Second, LogLevel: logger.Warn, ParameterizedQueries: true,
+	})})
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +53,7 @@ func OpenWithDriver(driver, dsn string) (*gorm.DB, error) {
 	} else {
 		sqlDB.SetMaxOpenConns(10)
 	}
-	if err = db.AutoMigrate(&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.LibraryIdSequence{}, &models.CeremonySession{}, &models.AuthSession{}); err != nil {
+	if err = db.AutoMigrate(&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.LibraryIdSequence{}, &models.CeremonySession{}, &models.AuthSession{}, &consent.Grant{}, &consent.Event{}, &consent.SessionLink{}, &oauth.Client{}, &oauth.Resource{}, &oauth.Scope{}, &oauth.ResourceCredential{}, &oauth.SessionRecord{}, &oauth.SessionAudience{}, &oauth.AssertionJTI{}, &oauth.PendingAuthorization{}, &audit.Event{}, &audit.SecurityEvent{}); err != nil {
 		sqlDB.Close()
 		return nil, err
 	}

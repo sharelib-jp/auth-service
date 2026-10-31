@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"time"
+
+	"github.com/sharelib-jp/auth-service/dao"
+	"github.com/sharelib-jp/auth-service/models"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/sharelib-jp/auth-service/config"
-	"github.com/sharelib-jp/auth-service/dao"
-	"github.com/sharelib-jp/auth-service/models"
+	"github.com/sharelib-jp/auth-service/internal/audit"
 	"gorm.io/gorm"
 )
 
@@ -115,7 +118,10 @@ func (s *Service) FinishRegistration(ctx context.Context, ceremonyToken, previou
 			}
 		}
 		token, err = s.createAuthSession(tx, user.ID, previousAuthToken)
-		return err
+		if err != nil {
+			return err
+		}
+		return audit.RecordSecurity(tx, audit.SecurityEvent{UserID: &user.ID, Type: "registration_login", Result: "success", VisibleToUser: true})
 	})
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return nil, "", newError(ErrConflict, "UserName, Email or passkey is already registered")
@@ -142,7 +148,14 @@ func (s *Service) BeginLogin(ctx context.Context, previousToken string) (*protoc
 }
 
 // FinishLogin consumes the ceremony even if parsing or verification fails.
-func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthToken string, response io.Reader) (*models.User, string, error) {
+func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthToken string, response io.Reader) (user *models.User, token string, resultErr error) {
+	defer func() {
+		if resultErr != nil {
+			if err := audit.RecordSecurity(s.db.WithContext(ctx), audit.SecurityEvent{Type: "login", Result: "failure"}); err != nil {
+				log.Print("failed to record unsuccessful login")
+			}
+		}
+	}()
 	session, err := s.takeCeremony(ctx, "login", ceremonyToken)
 	if err != nil {
 		return nil, "", err
@@ -151,8 +164,6 @@ func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthTo
 	if err != nil {
 		return nil, "", ErrInvalidPasskey
 	}
-	var user *models.User
-	var token string
 	// Serialize credential verification and counter updates to avoid lost updates.
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var lookupErr error
@@ -174,7 +185,10 @@ func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthTo
 			return err
 		}
 		token, err = s.createAuthSession(tx, user.ID, previousAuthToken)
-		return err
+		if err != nil {
+			return err
+		}
+		return audit.RecordSecurity(tx, audit.SecurityEvent{UserID: &user.ID, Type: "login", Result: "success", VisibleToUser: true})
 	})
 	if err != nil {
 		return nil, "", err

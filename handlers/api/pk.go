@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/sharelib-jp/auth-service/lib"
+
+	"github.com/gin-gonic/gin"
 )
 
 func (s *handler) beginRegistration(c *gin.Context) {
@@ -24,7 +25,7 @@ func (s *handler) beginRegistration(c *gin.Context) {
 
 func (s *handler) finishRegistration(c *gin.Context) {
 	s.setCookie(c, registrationCookie, "", -time.Hour)
-	user, token, err := s.service.FinishRegistration(c.Request.Context(), cookie(c, registrationCookie), cookie(c, authCookie), c.Request.Body)
+	user, token, err := s.service.FinishRegistration(c.Request.Context(), cookie(c, registrationCookie), s.currentAuthCookie(c), c.Request.Body)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -45,7 +46,7 @@ func (s *handler) beginLogin(c *gin.Context) {
 
 func (s *handler) finishLogin(c *gin.Context) {
 	s.setCookie(c, loginCookie, "", -time.Hour)
-	user, token, err := s.service.FinishLogin(c.Request.Context(), cookie(c, loginCookie), cookie(c, authCookie), c.Request.Body)
+	user, token, err := s.service.FinishLogin(c.Request.Context(), cookie(c, loginCookie), s.currentAuthCookie(c), c.Request.Body)
 	if err != nil {
 		respondError(c, err)
 		return

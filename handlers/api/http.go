@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/sharelib-jp/auth-service/lib"
+
 	"github.com/gin-gonic/gin"
 	"github.com/sharelib-jp/auth-service/config"
-	"github.com/sharelib-jp/auth-service/lib"
+
 	"gorm.io/gorm"
 )
 
@@ -28,12 +30,19 @@ func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
 	}
 	s := &handler{service: service, origin: conf.Origin(), secure: strings.HasPrefix(conf.Origin(), "https://")}
 	router := gin.New()
-	router.Use(gin.Logger(), gin.Recovery(), s.requestPolicy)
+	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}), gin.Recovery(), s.requestPolicy)
 	if err := router.SetTrustedProxies(nil); err != nil {
 		return nil, err
 	}
 
 	s.registerRoutes(router.Group("/api"))
+	if conf.OAuth.Enabled {
+		provider, err := newOAuthHandler(conf, db, service)
+		if err != nil {
+			return nil, err
+		}
+		provider.register(router)
+	}
 	return router, nil
 }
 
@@ -51,7 +60,8 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 	api.POST("/auth/register/finish", s.finishRegistration)
 	api.POST("/auth/login/begin", s.beginLogin)
 	api.POST("/auth/login/finish", s.finishLogin)
-	api.POST("/auth/logout", s.requireAuth, s.logout)
+	api.POST("/auth/logout", s.requireLogoutAuth, s.logout)
+	api.GET("/auth/oauth-session", s.oauthSessionStatus)
 
 	wellKnown := api.Group("/.well-known")
 	wellKnown.GET("/nodeinfo", s.Nodeinfo)
@@ -62,12 +72,14 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 	users.PATCH("/username", s.updateUserName)
 	users.PATCH("/name", s.updateName)
 	users.PATCH("/email", s.updateEmail)
+
 }
 
 func (s *handler) requestPolicy(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
-	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
+	backchannel := c.Request.URL.Path == "/oauth2/token" || c.Request.URL.Path == "/oauth2/revoke" || c.Request.URL.Path == "/oauth2/introspect" || c.Request.URL.Path == "/userinfo" || c.Request.URL.Path == "/internal/audit/events" || c.Request.URL.Path == "/internal/authorize/check"
+	if !backchannel && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
 		if origin := c.GetHeader("Origin"); (origin != "" && origin != s.origin) || c.GetHeader("Sec-Fetch-Site") == "cross-site" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "request origin is not allowed"})
 			return

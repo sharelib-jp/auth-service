@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/config"
 	"github.com/sharelib-jp/auth-service/dao"
+
+	"github.com/sharelib-jp/auth-service/config"
 	"github.com/sharelib-jp/auth-service/handlers/api"
 )
 

@@ -9,10 +9,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/dao"
 	"github.com/sharelib-jp/auth-service/models"
+
+	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -78,20 +79,27 @@ func (s *Service) createAuthSession(tx *gorm.DB, userID uuid.UUID, previousToken
 }
 
 func (s *Service) Authenticate(ctx context.Context, token string) (*models.User, error) {
+	user, _, err := s.AuthenticateAt(ctx, token)
+	return user, err
+}
+
+// AuthenticateAt also reports the original authentication time for OIDC.
+// Sessions use a fixed expiry set at creation, so this works for existing rows.
+func (s *Service) AuthenticateAt(ctx context.Context, token string) (*models.User, time.Time, error) {
 	if token == "" {
-		return nil, ErrUnauthenticated
+		return nil, time.Time{}, ErrUnauthenticated
 	}
 	session, err := dao.FindAuthSession(s.db.WithContext(ctx), tokenHash(token))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrUnauthenticated
+		return nil, time.Time{}, ErrUnauthenticated
 	}
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
 	if session.User.RPID != s.webAuthn.Config.RPID {
-		return nil, ErrUnauthenticated
+		return nil, time.Time{}, ErrUnauthenticated
 	}
-	return &session.User, nil
+	return &session.User, session.ExpiresAt.Add(-AuthTTL), nil
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {

@@ -3,8 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/sharelib-jp/auth-service/models"
+
+	"github.com/gin-gonic/gin"
 )
 
 func userResponse(user *models.User) any {

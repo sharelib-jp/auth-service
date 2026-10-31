@@ -3,7 +3,7 @@ import { Button } from '#/atoms/Button'
 import { Heading, HeadingTitle } from '#/atoms/Heading'
 import { Divider } from '#/atoms/Divider'
 import { Image, ImageArea } from '#/atoms/Image'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ErrorText } from '#/atoms/ErrorText'
 import placeholder from '#/assets/placeholder.png'
 
@@ -21,6 +21,30 @@ function LoginPageComponent() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [user, setUser] = useState<LoginUser | null>(null)
+
+  const pendingRequest = new URLSearchParams(window.location.search).get(
+    'oauth_request',
+  )
+  const oauthRequest =
+    pendingRequest && /^[A-Za-z0-9_-]{43}$/.test(pendingRequest)
+      ? pendingRequest
+      : null
+
+  useEffect(() => {
+    if (!oauthRequest) return
+    const controller = new AbortController()
+    void fetch('/api/auth/oauth-session', {
+      credentials: 'same-origin',
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (response.ok) {
+          window.location.replace(`/oauth2/continue?request=${oauthRequest}`)
+        }
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [oauthRequest])
 
   async function handleLogin() {
     if (isSubmitting) {
@@ -72,6 +96,10 @@ function LoginPageComponent() {
       }
 
       const loggedInUser: LoginUser = await finishResponse.json()
+      if (oauthRequest) {
+        window.location.replace(`/oauth2/continue?request=${oauthRequest}`)
+        return
+      }
       setUser(loggedInUser)
     } catch (error) {
       console.error(error)

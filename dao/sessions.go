@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sharelib-jp/auth-service/models"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

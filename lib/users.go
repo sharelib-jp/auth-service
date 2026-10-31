@@ -9,9 +9,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/dao"
 	"github.com/sharelib-jp/auth-service/models"
+
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
