@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/lib"
-
 	"github.com/gin-gonic/gin"
 	"github.com/sharelib-jp/auth-service/config"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 )
 
 func TestOAuthUsesHostBoundCookieOnHTTPS(t *testing.T) {
@@ -17,7 +16,7 @@ func TestOAuthUsesHostBoundCookieOnHTTPS(t *testing.T) {
 	client.register(t, "secure-cookie-user")
 	value := client.cookies[authCookie].Value
 	conf := &config.Config{SCHEME: "http://", HOSTNAME: "localhost", PORT: ":8080", WEBAUTHN_RP_DISPLAY_NAME: "Test", DATABASE_DRIVER: db.Dialector.Name(), DATABASE_DSN: "unused"}
-	service, err := lib.NewService(conf, db)
+	service, err := identity.NewService(conf, db)
 	if err != nil {
 		t.Fatal(err)
 	}

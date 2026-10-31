@@ -7,13 +7,11 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/casbin/casbin/v3"
 	"github.com/casbin/casbin/v3/model"
 	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/internal/audit"
-
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -65,7 +63,7 @@ func (s *Service) SetBinding(ctx context.Context, binding RoleBinding) error {
 		if err := tx.Where("id = ?", binding.ResourceID).First(&resource).Error; err != nil {
 			return err
 		}
-		var user models.User
+		var user identity.User
 		if err := tx.Where("id = ?", binding.UserID).First(&user).Error; err != nil {
 			return err
 		}

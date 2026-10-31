@@ -9,14 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/lib"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/ory/fosite"
 	"github.com/sharelib-jp/auth-service/internal/audit"
 	"github.com/sharelib-jp/auth-service/internal/consent"
-
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"gorm.io/gorm"
 )
@@ -154,7 +152,7 @@ func (h *oauthHandler) continueAuthorization(c *gin.Context) {
 	}
 	user, authenticatedAt, err := h.service.AuthenticateAt(c.Request.Context(), oauthSessionCookie(c, h.secure))
 	if err != nil {
-		if !errors.Is(err, lib.ErrUnauthenticated) {
+		if !errors.Is(err, identity.ErrUnauthenticated) {
 			serverError(c, err)
 			return
 		}

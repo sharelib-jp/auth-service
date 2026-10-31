@@ -3,27 +3,26 @@ package api
 import (
 	"net/http"
 
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/gin-gonic/gin"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 )
 
-func userResponse(user *models.User) any {
-	formatted, _ := models.FormatLibraryId(user.LibraryId)
-	barcode, _ := models.LibraryBarcode(user.LibraryId)
+func userResponse(user *identity.User) any {
+	formatted, _ := identity.FormatLibraryId(user.LibraryId)
+	barcode, _ := identity.LibraryBarcode(user.LibraryId)
 	return struct {
-		*models.User
+		*identity.User
 		LibraryIdFormatted string `json:"LibraryIdFormatted"`
 		Barcode            string `json:"Barcode"`
 	}{user, formatted, barcode}
 }
 
 func (s *handler) getUser(c *gin.Context) {
-	c.JSON(http.StatusOK, userResponse(c.MustGet("user").(*models.User)))
+	c.JSON(http.StatusOK, userResponse(c.MustGet("user").(*identity.User)))
 }
 
 func (s *handler) getBarcode(c *gin.Context) {
-	svg, err := models.LibraryBarcodeSVG(c.MustGet("user").(*models.User).LibraryId)
+	svg, err := identity.LibraryBarcodeSVG(c.MustGet("user").(*identity.User).LibraryId)
 	if err != nil {
 		serverError(c, err)
 		return
@@ -38,7 +37,7 @@ func (s *handler) updateUserName(c *gin.Context) {
 	if !decodeJSON(c, &input) {
 		return
 	}
-	user, err := s.service.UpdateUserName(c.Request.Context(), c.MustGet("user").(*models.User).ID, input.UserName)
+	user, err := s.service.UpdateUserName(c.Request.Context(), c.MustGet("user").(*identity.User).ID, input.UserName)
 	respondUser(c, user, err)
 }
 
@@ -49,7 +48,7 @@ func (s *handler) updateName(c *gin.Context) {
 	if !decodeJSON(c, &input) {
 		return
 	}
-	user, err := s.service.UpdateName(c.Request.Context(), c.MustGet("user").(*models.User).ID, input.Name)
+	user, err := s.service.UpdateName(c.Request.Context(), c.MustGet("user").(*identity.User).ID, input.Name)
 	respondUser(c, user, err)
 }
 
@@ -60,11 +59,11 @@ func (s *handler) updateEmail(c *gin.Context) {
 	if !decodeJSON(c, &input) {
 		return
 	}
-	user, err := s.service.UpdateEmail(c.Request.Context(), c.MustGet("user").(*models.User).ID, input.Email)
+	user, err := s.service.UpdateEmail(c.Request.Context(), c.MustGet("user").(*identity.User).ID, input.Email)
 	respondUser(c, user, err)
 }
 
-func respondUser(c *gin.Context, user *models.User, err error) {
+func respondUser(c *gin.Context, user *identity.User, err error) {
 	if err != nil {
 		respondError(c, err)
 		return

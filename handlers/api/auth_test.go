@@ -19,15 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/dao"
-	"github.com/sharelib-jp/auth-service/lib"
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/fxamacker/cbor/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/config"
-
+	"github.com/sharelib-jp/auth-service/internal/database"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"gorm.io/gorm"
 )
@@ -43,7 +40,7 @@ func testService(t *testing.T) (*testClient, *gorm.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	driver, dsn := testdb.Config(t)
-	db, err := dao.OpenWithDriver(driver, dsn)
+	db, err := database.OpenWithDriver(driver, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,16 +238,16 @@ func (auth *testAuthenticator) assertion(t *testing.T, challenge, origin string,
 	}
 }
 
-func (client *testClient) register(t *testing.T, username string) (*testAuthenticator, models.User) {
+func (client *testClient) register(t *testing.T, username string) (*testAuthenticator, identity.User) {
 	t.Helper()
-	response := client.do(t, "POST", "/api/auth/register/begin", lib.RegistrationInput{UserName: username, Name: "登録 太郎", Email: username + "@example.com"}, 200)
+	response := client.do(t, "POST", "/api/auth/register/begin", identity.RegistrationInput{UserName: username, Name: "登録 太郎", Email: username + "@example.com"}, 200)
 	options := optionsFrom(t, response)
 	if options.PublicKey.AuthenticatorSelection.ResidentKey != "required" || options.PublicKey.AuthenticatorSelection.UserVerification != "required" {
 		t.Fatalf("registration must require a discoverable, verified credential: %s", response.Body.String())
 	}
 	auth := newAuthenticator(t, options.PublicKey.User.ID)
 	response = client.do(t, "POST", "/api/auth/register/finish", auth.registration(t, options.PublicKey.Challenge, testOrigin, true), 201)
-	var user models.User
+	var user identity.User
 	if err := json.Unmarshal(response.Body.Bytes(), &user); err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +276,7 @@ func TestRegistrationLoginAndIndependentUpdates(t *testing.T) {
 		{"username", "UserName", "jiro"}, {"name", "Name", "更新 次郎"}, {"email", "Email", "JIRO@EXAMPLE.COM"},
 	} {
 		client.do(t, "PATCH", "/api/users/me/"+update.path, map[string]string{update.field: update.value}, 200)
-		var stored models.User
+		var stored identity.User
 		if err := db.First(&stored, "id = ?", user.ID).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -316,7 +313,7 @@ func TestRegistrationLoginAndIndependentUpdates(t *testing.T) {
 	if !strings.Contains(response.Body.String(), `"UserName":"jiro"`) || !strings.Contains(response.Body.String(), user.ID.String()) {
 		t.Fatal("login after profile updates failed")
 	}
-	var stored models.PasskeyCredential
+	var stored identity.PasskeyCredential
 	if err := db.First(&stored, "user_id = ?", user.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +362,7 @@ func TestConcurrentLoginCounterUpdates(t *testing.T) {
 	if statuses[200] != 1 || statuses[401] != 1 {
 		t.Fatalf("same credential counter must succeed once: %v", statuses)
 	}
-	var stored models.PasskeyCredential
+	var stored identity.PasskeyCredential
 	if err := db.First(&stored, "user_id = ?", user.ID).Error; err != nil || stored.Credential.Authenticator.SignCount != 1 {
 		t.Fatalf("concurrent login did not preserve counter: %+v, %v", stored, err)
 	}
@@ -393,7 +390,7 @@ func TestRegistrationAttributes(t *testing.T) {
 				input["attributes"] = test.attributes
 			}
 			options := optionsFrom(t, client.do(t, "POST", "/api/auth/register/begin", input, 200))
-			for _, model := range []any{&models.User{}, &models.UserAttributes{}} {
+			for _, model := range []any{&identity.User{}, &identity.UserAttributes{}} {
 				var count int64
 				if err := db.Model(model).Count(&count).Error; err != nil || count != 0 {
 					t.Fatalf("begin registration persisted %T: count=%d, error=%v", model, count, err)
@@ -401,11 +398,11 @@ func TestRegistrationAttributes(t *testing.T) {
 			}
 			auth := newAuthenticator(t, options.PublicKey.User.ID)
 			response := client.do(t, "POST", "/api/auth/register/finish", auth.registration(t, options.PublicKey.Challenge, testOrigin, true), 201)
-			var user models.User
+			var user identity.User
 			if err := json.Unmarshal(response.Body.Bytes(), &user); err != nil {
 				t.Fatal(err)
 			}
-			var attrs []models.UserAttributes
+			var attrs []identity.UserAttributes
 			if err := db.Find(&attrs).Error; err != nil {
 				t.Fatal(err)
 			}
@@ -440,13 +437,13 @@ func TestRegistrationAttributesFailureRollsBack(t *testing.T) {
 	failInserts(t, db, "user_attributes", "test attributes failure")
 	body := auth.registration(t, options.PublicKey.Challenge, testOrigin, true)
 	client.do(t, "POST", "/api/auth/register/finish", body, 500)
-	for _, model := range []any{&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.AuthSession{}} {
+	for _, model := range []any{&identity.User{}, &identity.UserAttributes{}, &identity.PasskeyCredential{}, &identity.AuthSession{}} {
 		var count int64
 		if err := db.Model(model).Count(&count).Error; err != nil || count != 0 {
 			t.Fatalf("failed attributes insert persisted %T: count=%d, error=%v", model, count, err)
 		}
 	}
-	var sequence models.LibraryIdSequence
+	var sequence identity.LibraryIdSequence
 	if err := db.First(&sequence, 1).Error; err != nil || sequence.Value != 0 {
 		t.Fatalf("failed attributes insert consumed a LibraryId: %+v, %v", sequence, err)
 	}
@@ -458,22 +455,22 @@ func TestRegistrationValidationAndSessionExpiry(t *testing.T) {
 	client, db := testService(t)
 	for _, input := range []any{
 		map[string]string{"UserName": "taro", "Name": "太郎"},
-		lib.RegistrationInput{UserName: "bad name", Name: "太郎", Email: "taro@example.com"},
-		lib.RegistrationInput{UserName: "taro", Name: " ", Email: "taro@example.com"},
-		lib.RegistrationInput{UserName: "taro", Name: "太郎", Email: "invalid"},
+		identity.RegistrationInput{UserName: "bad name", Name: "太郎", Email: "taro@example.com"},
+		identity.RegistrationInput{UserName: "taro", Name: " ", Email: "taro@example.com"},
+		identity.RegistrationInput{UserName: "taro", Name: "太郎", Email: "invalid"},
 		map[string]string{"UserName": "taro", "Name": "太郎", "Email": "taro@example.com", "ID": uuid.NewString()},
 	} {
 		client.do(t, "POST", "/api/auth/register/begin", input, 400)
 	}
-	input := lib.RegistrationInput{UserName: "taro", Name: "太郎", Email: "TARO@EXAMPLE.COM"}
+	input := identity.RegistrationInput{UserName: "taro", Name: "太郎", Email: "TARO@EXAMPLE.COM"}
 	options := optionsFrom(t, client.do(t, "POST", "/api/auth/register/begin", input, 200))
 	auth := newAuthenticator(t, options.PublicKey.User.ID)
 	var count int64
-	db.Model(&models.User{}).Count(&count)
+	db.Model(&identity.User{}).Count(&count)
 	if count != 0 {
 		t.Fatal("begin registration persisted an unverified user")
 	}
-	if err := db.Model(&models.CeremonySession{}).Where("kind = ?", "registration").Update("expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
+	if err := db.Model(&identity.CeremonySession{}).Where("kind = ?", "registration").Update("expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
 		t.Fatal(err)
 	}
 	client.do(t, "POST", "/api/auth/register/finish", auth.registration(t, options.PublicKey.Challenge, testOrigin, true), 400)
@@ -481,7 +478,7 @@ func TestRegistrationValidationAndSessionExpiry(t *testing.T) {
 	client.do(t, "POST", "/api/auth/register/begin", input, 409)
 	client.do(t, "PATCH", "/api/users/me/name", map[string]string{"Name": "valid", "Email": "injected@example.com"}, 400)
 	client.do(t, "PATCH", "/api/users/me/email", map[string]string{"Email": "not-an-email"}, 400)
-	if err := db.Model(&models.AuthSession{}).Where("user_id = ?", user.ID).Update("expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
+	if err := db.Model(&identity.AuthSession{}).Where("user_id = ?", user.ID).Update("expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
 		t.Fatal(err)
 	}
 	client.do(t, "GET", "/api/users/me", nil, 401)
@@ -491,7 +488,7 @@ func TestInvalidAuthenticatorResponses(t *testing.T) {
 	client, db := testService(t)
 	for _, mode := range []string{"origin", "challenge", "verification"} {
 		t.Run("registration_"+mode, func(t *testing.T) {
-			options := optionsFrom(t, client.do(t, "POST", "/api/auth/register/begin", lib.RegistrationInput{UserName: "taro", Name: "太郎", Email: "taro@example.com"}, 200))
+			options := optionsFrom(t, client.do(t, "POST", "/api/auth/register/begin", identity.RegistrationInput{UserName: "taro", Name: "太郎", Email: "taro@example.com"}, 200))
 			auth := newAuthenticator(t, options.PublicKey.User.ID)
 			challenge, origin, verified := options.PublicKey.Challenge, testOrigin, true
 			if mode == "origin" {
@@ -510,7 +507,7 @@ func TestInvalidAuthenticatorResponses(t *testing.T) {
 		})
 	}
 	var count int64
-	db.Model(&models.User{}).Count(&count)
+	db.Model(&identity.User{}).Count(&count)
 	if count != 0 {
 		t.Fatal("invalid registration created a user")
 	}
@@ -591,7 +588,7 @@ func TestAuthenticationSessionFailureRollsBack(t *testing.T) {
 			var path string
 			var body any
 			if kind == "registration" {
-				options := optionsFrom(t, client.do(t, "POST", "/api/auth/register/begin", lib.RegistrationInput{
+				options := optionsFrom(t, client.do(t, "POST", "/api/auth/register/begin", identity.RegistrationInput{
 					UserName: "second", Name: "次郎", Email: "second@example.com",
 					Attributes: map[string]any{"enabled": true},
 				}, 200))
@@ -609,21 +606,21 @@ func TestAuthenticationSessionFailureRollsBack(t *testing.T) {
 			if strings.Contains(response.Body.String(), "test session failure") {
 				t.Fatal("internal database error was exposed")
 			}
-			for _, model := range []any{&models.User{}, &models.PasskeyCredential{}, &models.AuthSession{}} {
+			for _, model := range []any{&identity.User{}, &identity.PasskeyCredential{}, &identity.AuthSession{}} {
 				var count int64
 				if err := db.Model(model).Count(&count).Error; err != nil || count != 1 {
 					t.Fatalf("failed %s changed %T: count=%d, error=%v", kind, model, count, err)
 				}
 			}
 			var attributeCount int64
-			if err := db.Model(&models.UserAttributes{}).Count(&attributeCount).Error; err != nil || attributeCount != 0 {
+			if err := db.Model(&identity.UserAttributes{}).Count(&attributeCount).Error; err != nil || attributeCount != 0 {
 				t.Fatalf("failed %s persisted attributes: count=%d, error=%v", kind, attributeCount, err)
 			}
-			var sequence models.LibraryIdSequence
+			var sequence identity.LibraryIdSequence
 			if err := db.First(&sequence, 1).Error; err != nil || sequence.Value != 1 {
 				t.Fatalf("failed registration consumed a LibraryId: %+v, %v", sequence, err)
 			}
-			var stored models.PasskeyCredential
+			var stored identity.PasskeyCredential
 			if err := db.First(&stored, "user_id = ?", original.ID).Error; err != nil || stored.Credential.Authenticator.SignCount != 0 {
 				t.Fatalf("failed login updated the credential counter: %+v, %v", stored, err)
 			}

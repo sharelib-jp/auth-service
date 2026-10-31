@@ -11,13 +11,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sharelib-jp/auth-service/lib"
-
 	"github.com/gin-gonic/gin"
 	"github.com/go-jose/go-jose/v3"
 	"github.com/ory/fosite"
 	"github.com/sharelib-jp/auth-service/config"
-
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"gorm.io/gorm"
 )
@@ -26,13 +24,13 @@ type oauthHandler struct {
 	db         *gorm.DB
 	store      *oauth.Store
 	provider   fosite.OAuth2Provider
-	service    *lib.Service
+	service    *identity.Service
 	issuer     string
 	publicKeys jose.JSONWebKeySet
 	secure     bool
 }
 
-func newOAuthHandler(conf *config.Config, db *gorm.DB, service *lib.Service) (*oauthHandler, error) {
+func newOAuthHandler(conf *config.Config, db *gorm.DB, service *identity.Service) (*oauthHandler, error) {
 	if conf.OAuth.Issuer != conf.Origin() {
 		return nil, errors.New("OAuth issuer must match the configured authentication origin")
 	}

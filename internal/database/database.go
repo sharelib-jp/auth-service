@@ -1,18 +1,15 @@
-package dao
+package database
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/sharelib-jp/auth-service/internal/audit"
 	"github.com/sharelib-jp/auth-service/internal/authorization"
 	"github.com/sharelib-jp/auth-service/internal/consent"
-
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -20,8 +17,6 @@ import (
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
-
-var ErrLibraryIdExhausted = errors.New("LibraryId range exhausted")
 
 // Open opens SQLite. Retain _txlock=immediate in the DSN for concurrent writes.
 func Open(dsn string) (*gorm.DB, error) {
@@ -54,20 +49,20 @@ func OpenWithDriver(driver, dsn string) (*gorm.DB, error) {
 	} else {
 		sqlDB.SetMaxOpenConns(10)
 	}
-	if err = db.AutoMigrate(&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.LibraryIdSequence{}, &models.CeremonySession{}, &models.AuthSession{}, &consent.Grant{}, &consent.Event{}, &consent.SessionLink{}, &oauth.Client{}, &oauth.Resource{}, &oauth.Scope{}, &oauth.ResourceCredential{}, &oauth.SessionRecord{}, &oauth.SessionAudience{}, &oauth.AssertionJTI{}, &oauth.PendingAuthorization{}, &audit.Event{}, &audit.SecurityEvent{}, &authorization.RoleBinding{}, &authorization.Policy{}); err != nil {
+	if err = db.AutoMigrate(&identity.User{}, &identity.UserAttributes{}, &identity.PasskeyCredential{}, &identity.LibraryIdSequence{}, &identity.CeremonySession{}, &identity.AuthSession{}, &consent.Grant{}, &consent.Event{}, &consent.SessionLink{}, &oauth.Client{}, &oauth.Resource{}, &oauth.Scope{}, &oauth.ResourceCredential{}, &oauth.SessionRecord{}, &oauth.SessionAudience{}, &oauth.AssertionJTI{}, &oauth.PendingAuthorization{}, &audit.Event{}, &audit.SecurityEvent{}, &authorization.RoleBinding{}, &authorization.Policy{}); err != nil {
 		sqlDB.Close()
 		return nil, err
 	}
 	// Seed from existing users without ever resetting an allocated sequence.
 	err = db.Transaction(func(tx *gorm.DB) error {
 		var max int
-		if err := tx.Model(&models.User{}).Select("COALESCE(MAX(library_id), 0)").Scan(&max).Error; err != nil {
+		if err := tx.Model(&identity.User{}).Select("COALESCE(MAX(library_id), 0)").Scan(&max).Error; err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.LibraryIdSequence{ID: 1, Value: max}).Error; err != nil {
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&identity.LibraryIdSequence{ID: 1, Value: max}).Error; err != nil {
 			return err
 		}
-		return tx.Model(&models.LibraryIdSequence{}).Where("id = ? AND value < ?", 1, max).Update("value", max).Error
+		return tx.Model(&identity.LibraryIdSequence{}).Where("id = ? AND value < ?", 1, max).Update("value", max).Error
 	})
 	if err != nil {
 		sqlDB.Close()

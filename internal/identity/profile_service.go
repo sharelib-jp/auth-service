@@ -1,4 +1,4 @@
-package lib
+package identity
 
 import (
 	"context"
@@ -8,9 +8,6 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/sharelib-jp/auth-service/dao"
-	"github.com/sharelib-jp/auth-service/models"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -43,32 +40,32 @@ func validateField(field, value string) (string, error) {
 }
 
 // Profile updates take the user ID obtained by the caller through Authenticate.
-func (s *Service) UpdateUserName(ctx context.Context, userID uuid.UUID, value string) (*models.User, error) {
+func (s *Service) UpdateUserName(ctx context.Context, userID uuid.UUID, value string) (*User, error) {
 	return s.updateField(ctx, userID, "UserName", "user_name", value)
 }
 
-func (s *Service) UpdateName(ctx context.Context, userID uuid.UUID, value string) (*models.User, error) {
+func (s *Service) UpdateName(ctx context.Context, userID uuid.UUID, value string) (*User, error) {
 	return s.updateField(ctx, userID, "Name", "name", value)
 }
 
-func (s *Service) UpdateEmail(ctx context.Context, userID uuid.UUID, value string) (*models.User, error) {
+func (s *Service) UpdateEmail(ctx context.Context, userID uuid.UUID, value string) (*User, error) {
 	return s.updateField(ctx, userID, "Email", "email", value)
 }
 
-func (s *Service) updateField(ctx context.Context, userID uuid.UUID, field, column, value string) (*models.User, error) {
+func (s *Service) updateField(ctx context.Context, userID uuid.UUID, field, column, value string) (*User, error) {
 	value, err := validateField(field, value)
 	if err != nil {
 		return nil, err
 	}
 	db := s.db.WithContext(ctx)
-	user, err := dao.FindUser(db, userID, s.webAuthn.Config.RPID)
+	user, err := FindUser(db, userID, s.webAuthn.Config.RPID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrUnauthenticated
 	}
 	if err != nil {
 		return nil, err
 	}
-	err = dao.UpdateUserField(db, user, column, value)
+	err = UpdateUserField(db, user, column, value)
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return nil, newError(ErrConflict, field+" is already registered")
 	}

@@ -4,16 +4,14 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"gorm.io/gorm"
 )
 
 func (s *handler) listConsents(c *gin.Context) {
-	grants, err := s.consents.List(c.Request.Context(), c.MustGet("user").(*models.User).ID)
+	grants, err := s.consents.List(c.Request.Context(), c.MustGet("user").(*identity.User).ID)
 	if err != nil {
 		serverError(c, err)
 		return
@@ -27,7 +25,7 @@ func (s *handler) getConsent(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	grant, err := s.consents.Get(c.Request.Context(), c.MustGet("user").(*models.User).ID, id)
+	grant, err := s.consents.Get(c.Request.Context(), c.MustGet("user").(*identity.User).ID, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.Status(http.StatusNotFound)
 		return
@@ -50,7 +48,7 @@ func (s *handler) revokeConsent(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	err = s.consents.Revoke(c.Request.Context(), c.MustGet("user").(*models.User).ID, id)
+	err = s.consents.Revoke(c.Request.Context(), c.MustGet("user").(*identity.User).ID, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.Status(http.StatusNotFound)
 		return

@@ -1,4 +1,4 @@
-package lib
+package identity
 
 import (
 	"context"
@@ -6,9 +6,6 @@ import (
 	"io"
 	"log"
 	"time"
-
-	"github.com/sharelib-jp/auth-service/dao"
-	"github.com/sharelib-jp/auth-service/models"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -55,14 +52,14 @@ func (s *Service) BeginRegistration(ctx context.Context, input RegistrationInput
 	if err != nil {
 		return nil, "", err
 	}
-	exists, err := dao.UserExists(s.db.WithContext(ctx), input.UserName, input.Email)
+	exists, err := UserExists(s.db.WithContext(ctx), input.UserName, input.Email)
 	if err != nil {
 		return nil, "", err
 	}
 	if exists {
 		return nil, "", newError(ErrConflict, "UserName or Email is already registered")
 	}
-	user := &models.User{UserName: input.UserName, Name: input.Name, Email: input.Email, RPID: s.webAuthn.Config.RPID}
+	user := &User{UserName: input.UserName, Name: input.Name, Email: input.Email, RPID: s.webAuthn.Config.RPID}
 	// The UUID and handle must already exist when generating WebAuthn options.
 	if err := user.BeforeCreate(nil); err != nil {
 		return nil, "", err
@@ -72,7 +69,7 @@ func (s *Service) BeginRegistration(ctx context.Context, input RegistrationInput
 	if err != nil {
 		return nil, "", err
 	}
-	pending := &models.PendingRegistration{
+	pending := &PendingRegistration{
 		ID: user.ID, WebAuthnHandle: user.WebAuthnHandle,
 		UserName: user.UserName, Name: user.Name, Email: user.Email,
 		Attributes: input.Attributes,
@@ -86,7 +83,7 @@ func (s *Service) BeginRegistration(ctx context.Context, input RegistrationInput
 
 // FinishRegistration consumes the ceremony even if parsing or verification fails.
 // The account, attributes, credential, LibraryId, and authentication session commit together.
-func (s *Service) FinishRegistration(ctx context.Context, ceremonyToken, previousAuthToken string, response io.Reader) (*models.User, string, error) {
+func (s *Service) FinishRegistration(ctx context.Context, ceremonyToken, previousAuthToken string, response io.Reader) (*User, string, error) {
 	session, err := s.takeCeremony(ctx, "registration", ceremonyToken)
 	if err != nil {
 		return nil, "", err
@@ -95,7 +92,7 @@ func (s *Service) FinishRegistration(ctx context.Context, ceremonyToken, previou
 	if pending == nil {
 		return nil, "", newError(ErrInvalidInput, "invalid registration session")
 	}
-	user := &models.User{
+	user := &User{
 		ID: pending.ID, WebAuthnHandle: pending.WebAuthnHandle, RPID: s.webAuthn.Config.RPID,
 		UserName: pending.UserName, Name: pending.Name, Email: pending.Email,
 	}
@@ -109,11 +106,11 @@ func (s *Service) FinishRegistration(ctx context.Context, ceremonyToken, previou
 	}
 	var token string
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := dao.CreateUser(tx, user, credential); err != nil {
+		if err := CreateUser(tx, user, credential); err != nil {
 			return err
 		}
 		if pending.Attributes != nil {
-			if err := dao.CreateUserAttributes(tx, user, pending.Attributes); err != nil {
+			if err := CreateUserAttributes(tx, user, pending.Attributes); err != nil {
 				return err
 			}
 		}
@@ -126,7 +123,7 @@ func (s *Service) FinishRegistration(ctx context.Context, ceremonyToken, previou
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return nil, "", newError(ErrConflict, "UserName, Email or passkey is already registered")
 	}
-	if errors.Is(err, dao.ErrLibraryIdExhausted) {
+	if errors.Is(err, ErrLibraryIdExhausted) {
 		return nil, "", newError(ErrConflict, "LibraryId range is exhausted")
 	}
 	if err != nil {
@@ -148,7 +145,7 @@ func (s *Service) BeginLogin(ctx context.Context, previousToken string) (*protoc
 }
 
 // FinishLogin consumes the ceremony even if parsing or verification fails.
-func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthToken string, response io.Reader) (user *models.User, token string, resultErr error) {
+func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthToken string, response io.Reader) (user *User, token string, resultErr error) {
 	defer func() {
 		if resultErr != nil {
 			if err := audit.RecordSecurity(s.db.WithContext(ctx), audit.SecurityEvent{Type: "login", Result: "failure"}); err != nil {
@@ -168,7 +165,7 @@ func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthTo
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var lookupErr error
 		lookup := func(rawID, userHandle []byte) (webauthn.User, error) {
-			user, lookupErr = dao.FindPasskeyUser(tx, s.webAuthn.Config.RPID, rawID, userHandle)
+			user, lookupErr = FindPasskeyUser(tx, s.webAuthn.Config.RPID, rawID, userHandle)
 			if lookupErr != nil {
 				return nil, lookupErr
 			}
@@ -181,7 +178,7 @@ func (s *Service) FinishLogin(ctx context.Context, ceremonyToken, previousAuthTo
 		if err != nil || credential == nil || credential.Authenticator.CloneWarning {
 			return ErrInvalidPasskey
 		}
-		if err := dao.UpdateCredential(tx, user, credential); err != nil {
+		if err := UpdateCredential(tx, user, credential); err != nil {
 			return err
 		}
 		token, err = s.createAuthSession(tx, user.ID, previousAuthToken)

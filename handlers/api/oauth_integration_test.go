@@ -19,14 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/dao"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/config"
 	"github.com/sharelib-jp/auth-service/internal/authorization"
 	"github.com/sharelib-jp/auth-service/internal/consent"
-
+	"github.com/sharelib-jp/auth-service/internal/database"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"gorm.io/gorm"
@@ -36,7 +34,7 @@ func oauthTestService(t *testing.T) (*testClient, *gorm.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	driver, dsn := testdb.Config(t)
-	db, err := dao.OpenWithDriver(driver, dsn)
+	db, err := database.OpenWithDriver(driver, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

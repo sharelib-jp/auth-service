@@ -6,8 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharelib-jp/auth-service/dao"
-
+	"github.com/sharelib-jp/auth-service/internal/database"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
 )
@@ -44,7 +43,7 @@ func TestOperatorRegistrationCommands(t *testing.T) {
 	invoke("scope", `{"id":"read","resource_id":"b","name":"b.orders.read","description":"Read orders","purpose_code":"orders","policy_version":1}`)
 	invoke("client", `{"id":"c","name":"C","public":true,"redirect_uris":["https://c.example/callback"],"grant_types":["authorization_code"],"scopes":["openid","b.orders.read"],"audience":["https://b.example/api"]}`)
 	invoke("status", `{"kind":"client","id":"c","status":"disabled"}`)
-	db, err := dao.OpenWithDriver(driver, dsn)
+	db, err := database.OpenWithDriver(driver, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

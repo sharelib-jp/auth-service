@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/lib"
-
 	"github.com/gin-gonic/gin"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 )
 
 const (
@@ -58,7 +57,7 @@ func (s *handler) currentAuthCookie(c *gin.Context) string {
 func (s *handler) oauthSessionStatus(c *gin.Context) {
 	_, err := s.service.Authenticate(c.Request.Context(), oauthSessionCookie(c, s.secure))
 	if err != nil {
-		if errors.Is(err, lib.ErrUnauthenticated) {
+		if errors.Is(err, identity.ErrUnauthenticated) {
 			c.Status(http.StatusUnauthorized)
 		} else {
 			serverError(c, err)
@@ -76,7 +75,7 @@ func (s *handler) requireAuth(c *gin.Context) {
 	}
 	user, err := s.service.Authenticate(c.Request.Context(), token)
 	if err != nil {
-		if errors.Is(err, lib.ErrUnauthenticated) {
+		if errors.Is(err, identity.ErrUnauthenticated) {
 			s.setCookie(c, authCookie, "", -time.Hour)
 		}
 		respondError(c, err)
@@ -95,7 +94,7 @@ func (s *handler) requireLogoutAuth(c *gin.Context) {
 			c.Next()
 			return
 		}
-		if !errors.Is(err, lib.ErrUnauthenticated) {
+		if !errors.Is(err, identity.ErrUnauthenticated) {
 			respondError(c, err)
 			c.Abort()
 			return

@@ -11,12 +11,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/sharelib-jp/auth-service/dao"
-
 	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/config"
 	"github.com/sharelib-jp/auth-service/internal/authorization"
-
+	"github.com/sharelib-jp/auth-service/internal/database"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 )
 
@@ -45,7 +43,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	db, err := dao.OpenWithDriver(conf.DATABASE_DRIVER, conf.DATABASE_DSN)
+	db, err := database.OpenWithDriver(conf.DATABASE_DRIVER, conf.DATABASE_DSN)
 	if err != nil {
 		return err
 	}

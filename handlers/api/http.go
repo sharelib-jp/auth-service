@@ -9,26 +9,33 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sharelib-jp/auth-service/lib"
-
 	"github.com/gin-gonic/gin"
 	"github.com/sharelib-jp/auth-service/config"
 	"github.com/sharelib-jp/auth-service/internal/audit"
 	"github.com/sharelib-jp/auth-service/internal/consent"
-
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"gorm.io/gorm"
 )
 
 type handler struct {
-	service  *lib.Service
+	service  *identity.Service
 	origin   string
 	secure   bool
 	consents *consent.Service
 	audit    *audit.Service
 }
 
+// Service is the authentication service accepted by RegisterRoutes.
+// The alias keeps the embedding API usable without exposing an internal import.
+type Service = identity.Service
+
+// NewService constructs the shared authentication service for an existing router.
+func NewService(conf *config.Config, db *gorm.DB) (*Service, error) {
+	return identity.NewService(conf, db)
+}
+
 func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
-	service, err := lib.NewService(conf, db)
+	service, err := NewService(conf, db)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +58,7 @@ func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
 }
 
 // RegisterRoutes mounts the JSON API on an existing router using a shared service.
-func RegisterRoutes(api *gin.RouterGroup, service *lib.Service, origin string) {
+func RegisterRoutes(api *gin.RouterGroup, service *Service, origin string) {
 	s := &handler{service: service, origin: origin, secure: strings.HasPrefix(origin, "https://")}
 	api.Use(s.requestPolicy)
 	s.registerRoutes(api)
@@ -128,11 +135,11 @@ func serverError(c *gin.Context, err error) {
 
 func respondError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, lib.ErrInvalidInput):
+	case errors.Is(err, identity.ErrInvalidInput):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errors.Is(err, lib.ErrConflict):
+	case errors.Is(err, identity.ErrConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errors.Is(err, lib.ErrUnauthenticated), errors.Is(err, lib.ErrInvalidPasskey):
+	case errors.Is(err, identity.ErrUnauthenticated), errors.Is(err, identity.ErrInvalidPasskey):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 	default:
 		serverError(c, err)

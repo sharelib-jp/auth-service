@@ -7,12 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/dao"
-
 	"github.com/google/uuid"
 	"github.com/ory/fosite"
 	"github.com/sharelib-jp/auth-service/internal/consent"
-
+	"github.com/sharelib-jp/auth-service/internal/database"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"gorm.io/gorm"
@@ -21,7 +19,7 @@ import (
 func testStore(t *testing.T) (*oauth.Store, *consent.Service, *gorm.DB, *fosite.Request, *consent.Grant) {
 	t.Helper()
 	driver, dsn := testdb.Config(t)
-	db, err := dao.OpenWithDriver(driver, dsn)
+	db, err := database.OpenWithDriver(driver, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

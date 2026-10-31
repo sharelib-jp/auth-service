@@ -14,7 +14,7 @@ import (
 )
 
 // Config selects PostgreSQL when TEST_POSTGRES_DSN is set, otherwise SQLite.
-// The PostgreSQL role must be able to create and drop schemas in a test dao.
+// The PostgreSQL role must be able to create and drop schemas in a test database.
 func Config(t *testing.T) (driver, dsn string) {
 	t.Helper()
 	dsn = os.Getenv("TEST_POSTGRES_DSN")

@@ -1,4 +1,4 @@
-package lib
+package identity
 
 import (
 	"context"
@@ -8,9 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"time"
-
-	"github.com/sharelib-jp/auth-service/dao"
-	"github.com/sharelib-jp/auth-service/models"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
@@ -32,12 +29,12 @@ func tokenHash(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (s *Service) saveCeremony(ctx context.Context, kind string, data *webauthn.SessionData, pending *models.PendingRegistration, previousToken string) (string, error) {
+func (s *Service) saveCeremony(ctx context.Context, kind string, data *webauthn.SessionData, pending *PendingRegistration, previousToken string) (string, error) {
 	token, err := newToken()
 	if err != nil {
 		return "", err
 	}
-	err = dao.SaveCeremony(s.db.WithContext(ctx), &models.CeremonySession{
+	err = SaveCeremony(s.db.WithContext(ctx), &CeremonySession{
 		TokenHash: tokenHash(token), Kind: kind, SessionData: *data,
 		PendingUser: pending, ExpiresAt: time.Now().Add(CeremonyTTL),
 	}, tokenHash(previousToken))
@@ -47,11 +44,11 @@ func (s *Service) saveCeremony(ctx context.Context, kind string, data *webauthn.
 	return token, nil
 }
 
-func (s *Service) takeCeremony(ctx context.Context, kind, token string) (*models.CeremonySession, error) {
+func (s *Service) takeCeremony(ctx context.Context, kind, token string) (*CeremonySession, error) {
 	if token == "" {
 		return nil, newError(ErrInvalidInput, "missing or expired ceremony session")
 	}
-	session, err := dao.TakeCeremony(s.db.WithContext(ctx), tokenHash(token), kind)
+	session, err := TakeCeremony(s.db.WithContext(ctx), tokenHash(token), kind)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, newError(ErrInvalidInput, "missing or expired ceremony session")
 	}
@@ -69,7 +66,7 @@ func (s *Service) createAuthSession(tx *gorm.DB, userID uuid.UUID, previousToken
 	if err != nil {
 		return "", err
 	}
-	err = dao.SaveAuthSession(tx, &models.AuthSession{
+	err = SaveAuthSession(tx, &AuthSession{
 		TokenHash: tokenHash(token), UserId: userID, ExpiresAt: time.Now().Add(AuthTTL),
 	}, tokenHash(previousToken))
 	if err != nil {
@@ -78,18 +75,18 @@ func (s *Service) createAuthSession(tx *gorm.DB, userID uuid.UUID, previousToken
 	return token, nil
 }
 
-func (s *Service) Authenticate(ctx context.Context, token string) (*models.User, error) {
+func (s *Service) Authenticate(ctx context.Context, token string) (*User, error) {
 	user, _, err := s.AuthenticateAt(ctx, token)
 	return user, err
 }
 
 // AuthenticateAt also reports the original authentication time for OIDC.
 // Sessions use a fixed expiry set at creation, so this works for existing rows.
-func (s *Service) AuthenticateAt(ctx context.Context, token string) (*models.User, time.Time, error) {
+func (s *Service) AuthenticateAt(ctx context.Context, token string) (*User, time.Time, error) {
 	if token == "" {
 		return nil, time.Time{}, ErrUnauthenticated
 	}
-	session, err := dao.FindAuthSession(s.db.WithContext(ctx), tokenHash(token))
+	session, err := FindAuthSession(s.db.WithContext(ctx), tokenHash(token))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, time.Time{}, ErrUnauthenticated
 	}
@@ -103,5 +100,5 @@ func (s *Service) AuthenticateAt(ctx context.Context, token string) (*models.Use
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {
-	return dao.DeleteAuthSession(s.db.WithContext(ctx), tokenHash(token))
+	return DeleteAuthSession(s.db.WithContext(ctx), tokenHash(token))
 }

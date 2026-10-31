@@ -1,4 +1,4 @@
-package dao
+package database
 
 import (
 	"errors"
@@ -8,12 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/internal/consent"
-
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"gorm.io/driver/postgres"
@@ -44,7 +42,7 @@ func TestOAuthMigrationPreservesExistingAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := legacy.AutoMigrate(&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.LibraryIdSequence{}, &models.CeremonySession{}, &models.AuthSession{}); err != nil {
+	if err := legacy.AutoMigrate(&identity.User{}, &identity.UserAttributes{}, &identity.PasskeyCredential{}, &identity.LibraryIdSequence{}, &identity.CeremonySession{}, &identity.AuthSession{}); err != nil {
 		t.Fatal(err)
 	}
 	user, credential := testUser(1)
@@ -52,10 +50,10 @@ func TestOAuthMigrationPreservesExistingAuthentication(t *testing.T) {
 	if err := legacy.Create(user).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := legacy.Create(&models.PasskeyCredential{UserId: user.ID, RPID: "localhost", CredentialId: "legacy", Credential: *credential}).Error; err != nil {
+	if err := legacy.Create(&identity.PasskeyCredential{UserId: user.ID, RPID: "localhost", CredentialId: "legacy", Credential: *credential}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := legacy.Create(&models.AuthSession{TokenHash: "legacy-hash", UserId: user.ID, ExpiresAt: time.Now().Add(time.Hour)}).Error; err != nil {
+	if err := legacy.Create(&identity.AuthSession{TokenHash: "legacy-hash", UserId: user.ID, ExpiresAt: time.Now().Add(time.Hour)}).Error; err != nil {
 		t.Fatal(err)
 	}
 	legacySQL, _ := legacy.DB()
@@ -63,11 +61,11 @@ func TestOAuthMigrationPreservesExistingAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := testDB(t, driver, dsn)
-	session, err := FindAuthSession(db, "legacy-hash")
+	session, err := identity.FindAuthSession(db, "legacy-hash")
 	if err != nil || session.User.ID != user.ID {
 		t.Fatalf("legacy session changed: %+v %v", session, err)
 	}
-	var stored models.PasskeyCredential
+	var stored identity.PasskeyCredential
 	if err := db.Where("user_id = ?", user.ID).First(&stored).Error; err != nil || stored.CredentialId != "legacy" {
 		t.Fatalf("legacy credential changed: %+v %v", stored, err)
 	}
@@ -78,8 +76,8 @@ func TestOAuthMigrationPreservesExistingAuthentication(t *testing.T) {
 	}
 }
 
-func testUser(n int) (*models.User, *webauthn.Credential) {
-	return &models.User{UserName: fmt.Sprintf("user-%d", n), Name: "Test", Email: fmt.Sprintf("%d@example.com", n), RPID: "localhost"},
+func testUser(n int) (*identity.User, *webauthn.Credential) {
+	return &identity.User{UserName: fmt.Sprintf("user-%d", n), Name: "Test", Email: fmt.Sprintf("%d@example.com", n), RPID: "localhost"},
 		&webauthn.Credential{ID: []byte(fmt.Sprintf("credential-%d", n)), PublicKey: []byte("test")}
 }
 
@@ -100,12 +98,12 @@ func TestSQLiteAttributeMigrationPreservesData(t *testing.T) {
 	if err := legacy.Exec(`CREATE TABLE user_attributes (user_id uuid PRIMARY KEY, updated_at datetime, value text)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	attrs := &models.UserAttributes{UserID: uuid.New(), Value: map[string]any{"theme": "dark", "enabled": true}}
+	attrs := &identity.UserAttributes{UserID: uuid.New(), Value: map[string]any{"theme": "dark", "enabled": true}}
 	if err := legacy.Create(attrs).Error; err != nil {
 		t.Fatal(err)
 	}
 	db := testDB(t, "sqlite", dsn)
-	var stored models.UserAttributes
+	var stored identity.UserAttributes
 	if err := db.First(&stored, "user_id = ?", attrs.UserID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -124,13 +122,13 @@ func TestLibraryIdConcurrentAllocationAndRollback(t *testing.T) {
 		go func(n int) {
 			defer group.Done()
 			user, credential := testUser(n)
-			if err := CreateUser(dbs[n%2], user, credential); err != nil {
+			if err := identity.CreateUser(dbs[n%2], user, credential); err != nil {
 				t.Errorf("concurrent create: %v", err)
 			}
 		}(i)
 	}
 	group.Wait()
-	var users []models.User
+	var users []identity.User
 	if err := dbs[0].Order("library_id").Find(&users).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -143,11 +141,11 @@ func TestLibraryIdConcurrentAllocationAndRollback(t *testing.T) {
 		}
 	}
 	user, credential := testUser(0)
-	if err := CreateUser(dbs[0], user, credential); !errors.Is(err, gorm.ErrDuplicatedKey) {
+	if err := identity.CreateUser(dbs[0], user, credential); !errors.Is(err, gorm.ErrDuplicatedKey) {
 		t.Fatalf("duplicate must fail: %v", err)
 	}
 	user, credential = testUser(count)
-	if err := CreateUser(dbs[0], user, credential); err != nil {
+	if err := identity.CreateUser(dbs[0], user, credential); err != nil {
 		t.Fatal(err)
 	}
 	if user.LibraryId != count+1 {
@@ -155,11 +153,11 @@ func TestLibraryIdConcurrentAllocationAndRollback(t *testing.T) {
 	}
 	// A credential conflict also rolls back the user and sequence.
 	user, _ = testUser(count + 1)
-	if err := CreateUser(dbs[0], user, credential); !errors.Is(err, gorm.ErrDuplicatedKey) {
+	if err := identity.CreateUser(dbs[0], user, credential); !errors.Is(err, gorm.ErrDuplicatedKey) {
 		t.Fatalf("duplicate credential must fail: %v", err)
 	}
 	user, credential = testUser(count + 2)
-	if err := CreateUser(dbs[0], user, credential); err != nil || user.LibraryId != count+2 {
+	if err := identity.CreateUser(dbs[0], user, credential); err != nil || user.LibraryId != count+2 {
 		t.Fatalf("credential conflict did not roll back: ID=%d, error=%v", user.LibraryId, err)
 	}
 	// Reopening must not reuse the highest issued ID, even after deletion.
@@ -168,7 +166,7 @@ func TestLibraryIdConcurrentAllocationAndRollback(t *testing.T) {
 	}
 	reopened := testDB(t, driver, dsn)
 	user, credential = testUser(count + 3)
-	if err := CreateUser(reopened, user, credential); err != nil || user.LibraryId != count+3 {
+	if err := identity.CreateUser(reopened, user, credential); err != nil || user.LibraryId != count+3 {
 		t.Fatalf("sequence did not survive reopen: ID=%d, error=%v", user.LibraryId, err)
 	}
 }
@@ -176,19 +174,19 @@ func TestLibraryIdConcurrentAllocationAndRollback(t *testing.T) {
 func TestLibraryIdExhaustion(t *testing.T) {
 	driver, dsn := testdb.Config(t)
 	db := testDB(t, driver, dsn)
-	if err := db.Model(&models.LibraryIdSequence{}).Where("id = 1").Update("value", models.MaxLibraryId-1).Error; err != nil {
+	if err := db.Model(&identity.LibraryIdSequence{}).Where("id = 1").Update("value", identity.MaxLibraryId-1).Error; err != nil {
 		t.Fatal(err)
 	}
 	user, credential := testUser(1)
-	if err := CreateUser(db, user, credential); err != nil || user.LibraryId != models.MaxLibraryId {
+	if err := identity.CreateUser(db, user, credential); err != nil || user.LibraryId != identity.MaxLibraryId {
 		t.Fatalf("last ID: ID=%d, error=%v", user.LibraryId, err)
 	}
 	user, credential = testUser(2)
-	if err := CreateUser(db, user, credential); !errors.Is(err, ErrLibraryIdExhausted) {
+	if err := identity.CreateUser(db, user, credential); !errors.Is(err, identity.ErrLibraryIdExhausted) {
 		t.Fatalf("overflow must fail: %v", err)
 	}
 	var count int64
-	db.Model(&models.User{}).Count(&count)
+	db.Model(&identity.User{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("overflow created a user: %d", count)
 	}
@@ -197,12 +195,12 @@ func TestLibraryIdExhaustion(t *testing.T) {
 func TestCeremonyConsumedOnce(t *testing.T) {
 	driver, dsn := testdb.Config(t)
 	db := testDB(t, driver, dsn)
-	if err := db.Create(&models.CeremonySession{TokenHash: "test", Kind: "login", ExpiresAt: time.Now().Add(time.Minute)}).Error; err != nil {
+	if err := db.Create(&identity.CeremonySession{TokenHash: "test", Kind: "login", ExpiresAt: time.Now().Add(time.Minute)}).Error; err != nil {
 		t.Fatal(err)
 	}
 	results := make(chan error, 2)
 	for i := 0; i < 2; i++ {
-		go func() { _, err := TakeCeremony(db, "test", "login"); results <- err }()
+		go func() { _, err := identity.TakeCeremony(db, "test", "login"); results <- err }()
 	}
 	successes := 0
 	for i := 0; i < 2; i++ {

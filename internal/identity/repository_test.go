@@ -1,25 +1,38 @@
-package dao
+package identity_test
 
 import (
 	"fmt"
 	"sync"
 	"testing"
 
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/google/uuid"
-
+	"github.com/sharelib-jp/auth-service/internal/database"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"gorm.io/gorm"
 )
 
+func testRepositoryDB(t *testing.T, driver, dsn string) *gorm.DB {
+	t.Helper()
+	db, err := database.OpenWithDriver(driver, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sqlDB.Close() })
+	return db
+}
+
 func TestUpdateUserAttributes(t *testing.T) {
 	driver, dsn := testdb.Config(t)
-	db := testDB(t, driver, dsn)
-	user := &models.User{ID: uuid.New()}
-	other := &models.User{ID: uuid.New()}
+	db := testRepositoryDB(t, driver, dsn)
+	user := &identity.User{ID: uuid.New()}
+	other := &identity.User{ID: uuid.New()}
 	for _, update := range []struct {
-		user  *models.User
+		user  *identity.User
 		key   string
 		value interface{}
 	}{
@@ -29,11 +42,11 @@ func TestUpdateUserAttributes(t *testing.T) {
 		{user, "optional", nil},
 		{other, "theme", "dark"},
 	} {
-		if err := UpdateUserAttributes(db, update.user, update.key, update.value); err != nil {
+		if err := identity.UpdateUserAttributes(db, update.user, update.key, update.value); err != nil {
 			t.Fatal(err)
 		}
 	}
-	var attrs models.UserAttributes
+	var attrs identity.UserAttributes
 	if err := db.First(&attrs, "user_id = ?", user.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +54,7 @@ func TestUpdateUserAttributes(t *testing.T) {
 	if len(attrs.Value) != 3 || attrs.Value["theme"] != "light" || attrs.Value["enabled"] != true || !exists || optional != nil || attrs.UpdatedAt.IsZero() {
 		t.Fatalf("unexpected persisted attributes: %+v", attrs)
 	}
-	var otherAttrs models.UserAttributes
+	var otherAttrs identity.UserAttributes
 	if err := db.First(&otherAttrs, "user_id = ?", other.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -49,23 +62,23 @@ func TestUpdateUserAttributes(t *testing.T) {
 		t.Fatalf("another user's attributes changed: %+v", otherAttrs)
 	}
 	// A serialization failure must roll back creation of a new row.
-	invalid := &models.User{ID: uuid.New()}
-	if err := UpdateUserAttributes(db, invalid, "invalid", make(chan int)); err == nil {
+	invalid := &identity.User{ID: uuid.New()}
+	if err := identity.UpdateUserAttributes(db, invalid, "invalid", make(chan int)); err == nil {
 		t.Fatal("expected a JSON serialization error")
 	}
 	var count int64
-	if err := db.Model(&models.UserAttributes{}).Where("user_id = ?", invalid.ID).Count(&count).Error; err != nil || count != 0 {
+	if err := db.Model(&identity.UserAttributes{}).Where("user_id = ?", invalid.ID).Count(&count).Error; err != nil || count != 0 {
 		t.Fatalf("failed create left a row: count=%d, error=%v", count, err)
 	}
 	// Existing rows may contain a JSON null rather than an initialized map.
-	empty := &models.User{ID: uuid.New()}
-	if err := db.Create(&models.UserAttributes{UserID: empty.ID}).Error; err != nil {
+	empty := &identity.User{ID: uuid.New()}
+	if err := db.Create(&identity.UserAttributes{UserID: empty.ID}).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := UpdateUserAttributes(db, empty, "theme", "dark"); err != nil {
+	if err := identity.UpdateUserAttributes(db, empty, "theme", "dark"); err != nil {
 		t.Fatal(err)
 	}
-	var initialized models.UserAttributes
+	var initialized identity.UserAttributes
 	if err := db.First(&initialized, "user_id = ?", empty.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -76,21 +89,21 @@ func TestUpdateUserAttributes(t *testing.T) {
 
 func TestConcurrentUserAttributeUpdates(t *testing.T) {
 	driver, dsn := testdb.Config(t)
-	dbs := []*gorm.DB{testDB(t, driver, dsn), testDB(t, driver, dsn)}
-	user := &models.User{ID: uuid.New()}
+	dbs := []*gorm.DB{testRepositoryDB(t, driver, dsn), testRepositoryDB(t, driver, dsn)}
+	user := &identity.User{ID: uuid.New()}
 	const count = 24
 	var group sync.WaitGroup
 	for i := 0; i < count; i++ {
 		group.Add(1)
 		go func(n int) {
 			defer group.Done()
-			if err := UpdateUserAttributes(dbs[n%2], user, fmt.Sprintf("key-%d", n), n); err != nil {
+			if err := identity.UpdateUserAttributes(dbs[n%2], user, fmt.Sprintf("key-%d", n), n); err != nil {
 				t.Errorf("concurrent attribute update: %v", err)
 			}
 		}(i)
 	}
 	group.Wait()
-	var attrs models.UserAttributes
+	var attrs identity.UserAttributes
 	if err := dbs[0].First(&attrs, "user_id = ?", user.ID).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +122,7 @@ func TestPostgresUserAttributesJSONB(t *testing.T) {
 	if driver != "postgres" {
 		t.Skip("set TEST_POSTGRES_DSN to verify PostgreSQL JSONB storage")
 	}
-	db := testDB(t, driver, dsn)
+	db := testRepositoryDB(t, driver, dsn)
 	var dataType string
 	if err := db.Raw(`SELECT data_type FROM information_schema.columns
 		WHERE table_schema = current_schema() AND table_name = 'user_attributes' AND column_name = 'value'`).Scan(&dataType).Error; err != nil {
@@ -118,8 +131,8 @@ func TestPostgresUserAttributesJSONB(t *testing.T) {
 	if dataType != "jsonb" {
 		t.Fatalf("attributes column type = %q, want jsonb", dataType)
 	}
-	user := &models.User{ID: uuid.New()}
-	if err := CreateUserAttributes(db, user, map[string]any{"address": map[string]any{"city": "東京"}}); err != nil {
+	user := &identity.User{ID: uuid.New()}
+	if err := identity.CreateUserAttributes(db, user, map[string]any{"address": map[string]any{"city": "東京"}}); err != nil {
 		t.Fatal(err)
 	}
 	var city string
@@ -131,10 +144,10 @@ func TestPostgresUserAttributesJSONB(t *testing.T) {
 		if err := db.Exec("UPDATE user_attributes SET value = "+nullValue+" WHERE user_id = ?", user.ID).Error; err != nil {
 			t.Fatal(err)
 		}
-		if err := UpdateUserAttributes(db, user, "enabled", true); err != nil {
+		if err := identity.UpdateUserAttributes(db, user, "enabled", true); err != nil {
 			t.Fatal(err)
 		}
-		var attrs models.UserAttributes
+		var attrs identity.UserAttributes
 		if err := db.First(&attrs, "user_id = ?", user.ID).Error; err != nil || len(attrs.Value) != 1 || attrs.Value["enabled"] != true {
 			t.Fatalf("null attributes were not initialized: %+v, %v", attrs, err)
 		}

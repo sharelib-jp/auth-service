@@ -4,13 +4,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/lib"
-
 	"github.com/gin-gonic/gin"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 )
 
 func (s *handler) beginRegistration(c *gin.Context) {
-	var input lib.RegistrationInput
+	var input identity.RegistrationInput
 	if !decodeJSON(c, &input) {
 		return
 	}
@@ -19,7 +18,7 @@ func (s *handler) beginRegistration(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
-	s.setCookie(c, registrationCookie, token, lib.CeremonyTTL)
+	s.setCookie(c, registrationCookie, token, identity.CeremonyTTL)
 	c.JSON(http.StatusOK, options)
 }
 
@@ -30,7 +29,7 @@ func (s *handler) finishRegistration(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
-	s.setCookie(c, authCookie, token, lib.AuthTTL)
+	s.setCookie(c, authCookie, token, identity.AuthTTL)
 	c.JSON(http.StatusCreated, userResponse(user))
 }
 
@@ -40,7 +39,7 @@ func (s *handler) beginLogin(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
-	s.setCookie(c, loginCookie, token, lib.CeremonyTTL)
+	s.setCookie(c, loginCookie, token, identity.CeremonyTTL)
 	c.JSON(http.StatusOK, options)
 }
 
@@ -51,6 +50,6 @@ func (s *handler) finishLogin(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
-	s.setCookie(c, authCookie, token, lib.AuthTTL)
+	s.setCookie(c, authCookie, token, identity.AuthTTL)
 	c.JSON(http.StatusOK, userResponse(user))
 }

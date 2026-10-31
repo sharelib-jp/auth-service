@@ -6,11 +6,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sharelib-jp/auth-service/models"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/internal/audit"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 )
 
 func (h *oauthHandler) receiveAuditEvent(c *gin.Context) {
@@ -54,7 +53,7 @@ func (s *handler) listAccessEvents(c *gin.Context) {
 		}
 		limit = value
 	}
-	events, err := s.audit.List(c.Request.Context(), c.MustGet("user").(*models.User).ID, limit, c.Query("cursor"))
+	events, err := s.audit.List(c.Request.Context(), c.MustGet("user").(*identity.User).ID, limit, c.Query("cursor"))
 	if errors.Is(err, audit.ErrInvalidEvent) {
 		c.Status(http.StatusBadRequest)
 		return
@@ -76,7 +75,7 @@ func (s *handler) listSecurityEvents(c *gin.Context) {
 		}
 		limit = value
 	}
-	events, err := s.audit.ListSecurity(c.Request.Context(), c.MustGet("user").(*models.User).ID, limit, c.Query("cursor"))
+	events, err := s.audit.ListSecurity(c.Request.Context(), c.MustGet("user").(*identity.User).ID, limit, c.Query("cursor"))
 	if errors.Is(err, audit.ErrInvalidEvent) {
 		c.Status(http.StatusBadRequest)
 		return
