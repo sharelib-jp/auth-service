@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { validateRegistration } from '../src/routes/register/-validation.ts'
+import { validateRegistration } from '../src/lib/validateInputText.ts'
 
 const today = new Date(2026, 9, 25, 12)
 const validValues = {
