@@ -72,7 +72,7 @@ export const IdentificationComponent = () => {
           <TabItem {...getTabProps(0)}>バーコード</TabItem>
           <TabItem {...getTabProps(1)}>ワンタイム QR</TabItem>
         </TabList>
-        <TabPanel {...getPanelProps(0)} className="max-h-64">
+        <TabPanel {...getPanelProps(0)} className="">
           {loadedIdentificationBarcodeStatus == 'loading' ? (
             <ProgressIndicator type="inlined">
               <ProgressIndicatorSpinner size="sm" />
@@ -88,7 +88,7 @@ export const IdentificationComponent = () => {
                   className="max-h-36"
                 />
               </div>
-              <dl className="text-sm text-gray-500 truncate mx-1">
+              <dl className="text-sm text-gray-500 truncate mx-1 my-2">
                 <div className="flex gap-1">
                   <dt>ユーザ ID:</dt>
                   <dd>
@@ -132,7 +132,7 @@ export const IdentificationComponent = () => {
             <p role="alert">バーコードの読み込みに失敗しました</p>
           ) : null}
         </TabPanel>
-        <TabPanel {...getPanelProps(1)} className="max-h-64">
+        <TabPanel {...getPanelProps(1)} className="">
           <p>ワンタイム QR コードは未実装です</p>
         </TabPanel>
       </Tab>
