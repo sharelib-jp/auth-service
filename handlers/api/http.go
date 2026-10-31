@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharelib-jp/auth-service/config"
+	"github.com/sharelib-jp/auth-service/internal/audit"
 	"github.com/sharelib-jp/auth-service/internal/consent"
 
 	"gorm.io/gorm"
@@ -23,6 +24,7 @@ type handler struct {
 	origin   string
 	secure   bool
 	consents *consent.Service
+	audit    *audit.Service
 }
 
 func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
@@ -30,7 +32,7 @@ func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &handler{service: service, origin: conf.Origin(), secure: strings.HasPrefix(conf.Origin(), "https://"), consents: consent.NewService(consent.NewRepository(db))}
+	s := &handler{service: service, origin: conf.Origin(), secure: strings.HasPrefix(conf.Origin(), "https://"), consents: consent.NewService(consent.NewRepository(db)), audit: audit.NewService(db)}
 	router := gin.New()
 	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}), gin.Recovery(), s.requestPolicy)
 	if err := router.SetTrustedProxies(nil); err != nil {
@@ -79,6 +81,10 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 		consents.GET("", s.listConsents)
 		consents.GET("/:id", s.getConsent)
 		consents.DELETE("/:id", s.revokeConsent)
+	}
+	if s.audit != nil {
+		api.GET("/me/access-events", s.requireAuth, s.listAccessEvents)
+		api.GET("/me/security-events", s.requireAuth, s.listSecurityEvents)
 	}
 
 }
