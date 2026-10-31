@@ -14,6 +14,9 @@ var ErrInvalidGrant = errors.New("invalid consent grant")
 
 type Repository interface {
 	Create(context.Context, *Grant, *Event) error
+	List(context.Context, uuid.UUID) ([]Grant, error)
+	Get(context.Context, uuid.UUID, uuid.UUID) (*Grant, error)
+	Revoke(context.Context, uuid.UUID, uuid.UUID, time.Time) error
 }
 
 type Service struct{ repo Repository }
@@ -56,4 +59,16 @@ func (s *Service) Create(ctx context.Context, grant Grant) (*Grant, error) {
 		return nil, err
 	}
 	return &grant, nil
+}
+
+func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]Grant, error) {
+	return s.repo.List(ctx, userID)
+}
+
+func (s *Service) Get(ctx context.Context, userID, id uuid.UUID) (*Grant, error) {
+	return s.repo.Get(ctx, userID, id)
+}
+
+func (s *Service) Revoke(ctx context.Context, userID, id uuid.UUID) error {
+	return s.repo.Revoke(ctx, userID, id, time.Now().UTC())
 }
