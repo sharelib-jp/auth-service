@@ -89,4 +89,5 @@ func (h *oauthHandler) register(router *gin.Engine) {
 	router.POST("/oauth2/introspect", h.introspect)
 	router.GET("/userinfo", h.userinfo)
 	router.POST("/userinfo", h.userinfo)
+	router.POST("/internal/authorize/check", h.checkBusinessPolicy)
 }

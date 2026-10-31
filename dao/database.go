@@ -10,6 +10,7 @@ import (
 	"github.com/sharelib-jp/auth-service/models"
 
 	"github.com/sharelib-jp/auth-service/internal/audit"
+	"github.com/sharelib-jp/auth-service/internal/authorization"
 	"github.com/sharelib-jp/auth-service/internal/consent"
 
 	"github.com/sharelib-jp/auth-service/internal/oauth"
@@ -53,7 +54,7 @@ func OpenWithDriver(driver, dsn string) (*gorm.DB, error) {
 	} else {
 		sqlDB.SetMaxOpenConns(10)
 	}
-	if err = db.AutoMigrate(&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.LibraryIdSequence{}, &models.CeremonySession{}, &models.AuthSession{}, &consent.Grant{}, &consent.Event{}, &consent.SessionLink{}, &oauth.Client{}, &oauth.Resource{}, &oauth.Scope{}, &oauth.ResourceCredential{}, &oauth.SessionRecord{}, &oauth.SessionAudience{}, &oauth.AssertionJTI{}, &oauth.PendingAuthorization{}, &audit.Event{}, &audit.SecurityEvent{}); err != nil {
+	if err = db.AutoMigrate(&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.LibraryIdSequence{}, &models.CeremonySession{}, &models.AuthSession{}, &consent.Grant{}, &consent.Event{}, &consent.SessionLink{}, &oauth.Client{}, &oauth.Resource{}, &oauth.Scope{}, &oauth.ResourceCredential{}, &oauth.SessionRecord{}, &oauth.SessionAudience{}, &oauth.AssertionJTI{}, &oauth.PendingAuthorization{}, &audit.Event{}, &audit.SecurityEvent{}, &authorization.RoleBinding{}, &authorization.Policy{}); err != nil {
 		sqlDB.Close()
 		return nil, err
 	}
