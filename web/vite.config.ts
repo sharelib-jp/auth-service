@@ -11,13 +11,27 @@ const extraAllowedHost = process.env.AUTH_DEV_ALLOWED_HOST
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  build: {
+    outDir: '../handlers/web/dist',
+    emptyOutDir: true,
+  },
   plugins: [
     devtools(),
     tailwindcss(),
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     viteReact(),
   ],
+  preview: {
+    headers: {
+      'Content-Security-Policy': "frame-ancestors 'none'",
+      'X-Frame-Options': 'DENY',
+    },
+  },
   server: {
+    headers: {
+      'Content-Security-Policy': "frame-ancestors 'none'",
+      'X-Frame-Options': 'DENY',
+    },
     allowedHosts: [
       'localhost',
       'auth-dev-sharelib.luca.hij1.local.sasakulab.com',
@@ -28,9 +42,7 @@ const config = defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
-      '/oauth2': { target: apiTarget, changeOrigin: true },
       '/.well-known': { target: apiTarget, changeOrigin: true },
-      '/userinfo': { target: apiTarget, changeOrigin: true },
     },
   },
 })
