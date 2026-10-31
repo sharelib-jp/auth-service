@@ -86,7 +86,6 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 		api.GET("/me/access-events", s.requireAuth, s.listAccessEvents)
 		api.GET("/me/security-events", s.requireAuth, s.listSecurityEvents)
 	}
-
 }
 
 func (s *handler) requestPolicy(c *gin.Context) {

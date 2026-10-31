@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -69,8 +70,37 @@ func newOAuthHandler(conf *config.Config, db *gorm.DB, service *lib.Service) (*o
 	}
 	keyJWK := &jose.JSONWebKey{Key: key, KeyID: conf.OAuth.SigningKeyID, Use: "sig", Algorithm: "RS256"}
 	publicKeys := jose.JSONWebKeySet{Keys: []jose.JSONWebKey{keyJWK.Public()}}
+	if conf.OAuth.PreviousJWKSFile != "" {
+		data, err := os.ReadFile(conf.OAuth.PreviousJWKSFile)
+		if err != nil {
+			return nil, fmt.Errorf("read previous JWKS: %w", err)
+		}
+		var previous jose.JSONWebKeySet
+		if err := json.Unmarshal(data, &previous); err != nil {
+			return nil, fmt.Errorf("parse previous JWKS: %w", err)
+		}
+		seen := map[string]bool{keyJWK.KeyID: true}
+		for _, old := range previous.Keys {
+			public, ok := old.Key.(*rsa.PublicKey)
+			if !ok || public.N == nil || public.N.BitLen() < 2048 || old.KeyID == "" || old.Use != "sig" || old.Algorithm != "RS256" || seen[old.KeyID] {
+				return nil, errors.New("invalid or duplicate previous OIDC public key")
+			}
+			seen[old.KeyID] = true
+			publicKeys.Keys = append(publicKeys.Keys, old)
+		}
+	}
+	var previousSecrets [][]byte
+	if encoded := os.Getenv("OAUTH_HMAC_PREVIOUS_SECRETS"); encoded != "" {
+		for _, entry := range strings.Split(encoded, ",") {
+			decoded, err := base64.RawURLEncoding.DecodeString(entry)
+			if err != nil || len(decoded) < 32 {
+				return nil, errors.New("OAUTH_HMAC_PREVIOUS_SECRETS contains an invalid key")
+			}
+			previousSecrets = append(previousSecrets, decoded)
+		}
+	}
 	store := oauth.NewStore(db)
-	provider, err := oauth.NewProvider(store, oauth.ProviderConfig{Issuer: conf.OAuth.Issuer, HMACSecret: secret, SigningKey: keyJWK})
+	provider, err := oauth.NewProvider(store, oauth.ProviderConfig{Issuer: conf.OAuth.Issuer, HMACSecret: secret, RotatedHMACSecrets: previousSecrets, SigningKey: keyJWK})
 	if err != nil {
 		return nil, err
 	}

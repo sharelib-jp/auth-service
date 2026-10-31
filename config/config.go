@@ -26,10 +26,11 @@ type Config struct {
 // OAuth is opt-in. HMAC key material comes from the OAUTH_HMAC_SECRET
 // environment variable, encoded using unpadded base64url.
 type OAuthConfig struct {
-	Enabled        bool   `toml:"ENABLED"`
-	Issuer         string `toml:"ISSUER"`
-	SigningKeyFile string `toml:"SIGNING_KEY_FILE"`
-	SigningKeyID   string `toml:"SIGNING_KEY_ID"`
+	Enabled          bool   `toml:"ENABLED"`
+	Issuer           string `toml:"ISSUER"`
+	SigningKeyFile   string `toml:"SIGNING_KEY_FILE"`
+	SigningKeyID     string `toml:"SIGNING_KEY_ID"`
+	PreviousJWKSFile string `toml:"PREVIOUS_JWKS_FILE"`
 }
 
 type Contact struct {
