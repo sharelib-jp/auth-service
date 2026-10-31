@@ -8,10 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sharelib-jp/auth-service/models"
+
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
+	"github.com/sharelib-jp/auth-service/internal/consent"
+
+	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
-	"github.com/sharelib-jp/auth-service/models"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -25,6 +30,52 @@ func testDB(t *testing.T, driver, dsn string) *gorm.DB {
 	sqlDB, _ := db.DB()
 	t.Cleanup(func() { sqlDB.Close() })
 	return db
+}
+
+func TestOAuthMigrationPreservesExistingAuthentication(t *testing.T) {
+	driver, dsn := testdb.Config(t)
+	var dialector gorm.Dialector
+	if driver == "postgres" {
+		dialector = postgres.Open(dsn)
+	} else {
+		dialector = sqlite.Open(dsn)
+	}
+	legacy, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.AutoMigrate(&models.User{}, &models.UserAttributes{}, &models.PasskeyCredential{}, &models.LibraryIdSequence{}, &models.CeremonySession{}, &models.AuthSession{}); err != nil {
+		t.Fatal(err)
+	}
+	user, credential := testUser(1)
+	user.LibraryId = 1
+	if err := legacy.Create(user).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Create(&models.PasskeyCredential{UserId: user.ID, RPID: "localhost", CredentialId: "legacy", Credential: *credential}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Create(&models.AuthSession{TokenHash: "legacy-hash", UserId: user.ID, ExpiresAt: time.Now().Add(time.Hour)}).Error; err != nil {
+		t.Fatal(err)
+	}
+	legacySQL, _ := legacy.DB()
+	if err := legacySQL.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db := testDB(t, driver, dsn)
+	session, err := FindAuthSession(db, "legacy-hash")
+	if err != nil || session.User.ID != user.ID {
+		t.Fatalf("legacy session changed: %+v %v", session, err)
+	}
+	var stored models.PasskeyCredential
+	if err := db.Where("user_id = ?", user.ID).First(&stored).Error; err != nil || stored.CredentialId != "legacy" {
+		t.Fatalf("legacy credential changed: %+v %v", stored, err)
+	}
+	for _, table := range []any{&oauth.Client{}, &oauth.SessionRecord{}, &consent.Grant{}} {
+		if !db.Migrator().HasTable(table) {
+			t.Fatalf("missing migrated table %T", table)
+		}
+	}
 }
 
 func testUser(n int) (*models.User, *webauthn.Credential) {

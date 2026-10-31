@@ -5,9 +5,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"github.com/sharelib-jp/auth-service/models"
+
+	"github.com/google/uuid"
+
+	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"gorm.io/gorm"
 )
 

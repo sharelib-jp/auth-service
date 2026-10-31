@@ -19,14 +19,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sharelib-jp/auth-service/dao"
+	"github.com/sharelib-jp/auth-service/lib"
+	"github.com/sharelib-jp/auth-service/models"
+
 	"github.com/fxamacker/cbor/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/sharelib-jp/auth-service/config"
-	"github.com/sharelib-jp/auth-service/dao"
+
 	"github.com/sharelib-jp/auth-service/internal/testdb"
-	"github.com/sharelib-jp/auth-service/lib"
-	"github.com/sharelib-jp/auth-service/models"
 	"gorm.io/gorm"
 )
 

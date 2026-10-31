@@ -9,12 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-webauthn/webauthn/webauthn"
-	"github.com/sharelib-jp/auth-service/config"
 	"github.com/sharelib-jp/auth-service/dao"
-	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"github.com/sharelib-jp/auth-service/lib"
 	"github.com/sharelib-jp/auth-service/models"
+
+	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/sharelib-jp/auth-service/config"
+
+	"github.com/sharelib-jp/auth-service/internal/testdb"
 	"gorm.io/gorm"
 )
 
