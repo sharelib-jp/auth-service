@@ -8,7 +8,7 @@ import success from '#/assets/smartphone-success.png'
 import attention from '#/assets/smartphone-attention.png'
 import placeholder from '#/assets/placeholder.png'
 import { useState } from 'react'
-import { validateRegistration } from './-validation'
+import { validateRegistration } from '../../lib/validateInputText'
 import { ErrorText } from '#/atoms/ErrorText'
 
 export const Route = createFileRoute('/register/step2')({
