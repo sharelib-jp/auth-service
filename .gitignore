@@ -1,2 +1,5 @@
 /auth.db
 /auth.db-*
+/handlers/web/dist/
+**/config.toml
+**/**.pem

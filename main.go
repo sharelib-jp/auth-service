@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/sharelib-jp/auth-service/config"
-	"github.com/sharelib-jp/auth-service/dao"
 	"github.com/sharelib-jp/auth-service/handlers/api"
+	"github.com/sharelib-jp/auth-service/handlers/web"
+	"github.com/sharelib-jp/auth-service/internal/database"
 )
 
 func main() {
@@ -16,7 +17,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db, err := dao.OpenWithDriver(conf.DATABASE_DRIVER, conf.DATABASE_DSN)
+	db, err := database.OpenWithDriver(conf.DATABASE_DRIVER, conf.DATABASE_DSN)
 	if err != nil {
 		log.Fatal("Failed to initialize database: ", err)
 	}
@@ -30,6 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to initialize authentication: ", err)
 	}
+	web.Register(router, "handlers/web/dist")
 
 	server := &http.Server{
 		Addr: conf.PORT, Handler: router,

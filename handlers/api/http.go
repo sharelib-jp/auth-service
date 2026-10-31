@@ -11,37 +11,71 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sharelib-jp/auth-service/config"
-	"github.com/sharelib-jp/auth-service/lib"
+	"github.com/sharelib-jp/auth-service/internal/audit"
+	"github.com/sharelib-jp/auth-service/internal/consent"
+	"github.com/sharelib-jp/auth-service/internal/identity"
+	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"gorm.io/gorm"
 )
 
 type handler struct {
-	service *lib.Service
-	origin  string
-	secure  bool
+	db       *gorm.DB
+	service  *identity.Service
+	origin   string
+	secure   bool
+	consents *consent.Service
+	audit    *audit.Service
+}
+
+// Service is the authentication service accepted by RegisterRoutes.
+// The alias keeps the embedding API usable without exposing an internal import.
+type Service = identity.Service
+
+// NewService constructs the shared authentication service for an existing router.
+func NewService(conf *config.Config, db *gorm.DB) (*Service, error) {
+	return identity.NewService(conf, db)
 }
 
 func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
-	service, err := lib.NewService(conf, db)
+	service, err := NewService(conf, db)
 	if err != nil {
 		return nil, err
 	}
-	s := &handler{service: service, origin: conf.Origin(), secure: strings.HasPrefix(conf.Origin(), "https://")}
+	s := &handler{db: db, service: service, origin: conf.Origin(), secure: strings.HasPrefix(conf.Origin(), "https://"), consents: consent.NewService(consent.NewRepository(db)), audit: audit.NewService(db)}
 	router := gin.New()
-	router.Use(gin.Logger(), gin.Recovery(), s.requestPolicy)
+	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}), gin.Recovery(), s.requestPolicy)
 	if err := router.SetTrustedProxies(nil); err != nil {
 		return nil, err
 	}
 
 	s.registerRoutes(router.Group("/api"))
+	s.registerWellKnownRoutes(router.Group("/.well-known"))
+	if conf.OAuth.Enabled {
+		provider, err := newOAuthHandler(conf, db, service)
+		if err != nil {
+			return nil, err
+		}
+		provider.register(router)
+	}
 	return router, nil
 }
 
 // RegisterRoutes mounts the JSON API on an existing router using a shared service.
-func RegisterRoutes(api *gin.RouterGroup, service *lib.Service, origin string) {
+func RegisterRoutes(api *gin.RouterGroup, service *Service, origin string) {
 	s := &handler{service: service, origin: origin, secure: strings.HasPrefix(origin, "https://")}
 	api.Use(s.requestPolicy)
 	s.registerRoutes(api)
+}
+
+// RegisterWellKnownRoutes mounts the public metadata endpoints when embedding
+// the API in an existing Gin router. Mount group at /.well-known.
+func RegisterWellKnownRoutes(group *gin.RouterGroup, service *Service) {
+	(&handler{service: service}).registerWellKnownRoutes(group)
+}
+
+func (s *handler) registerWellKnownRoutes(group *gin.RouterGroup) {
+	group.GET("/nodeinfo", s.Nodeinfo)
+	group.GET("/header", s.BrandLogo)
 }
 
 func (s *handler) registerRoutes(api *gin.RouterGroup) {
@@ -51,10 +85,8 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 	api.POST("/auth/register/finish", s.finishRegistration)
 	api.POST("/auth/login/begin", s.beginLogin)
 	api.POST("/auth/login/finish", s.finishLogin)
-	api.POST("/auth/logout", s.requireAuth, s.logout)
-
-	wellKnown := api.Group("/.well-known")
-	wellKnown.GET("/nodeinfo", s.Nodeinfo)
+	api.POST("/auth/logout", s.requireLogoutAuth, s.logout)
+	api.GET("/auth/oauth-session", s.oauthSessionStatus)
 
 	users := api.Group("/users/me", s.requireAuth)
 	users.GET("", s.getUser)
@@ -62,12 +94,23 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 	users.PATCH("/username", s.updateUserName)
 	users.PATCH("/name", s.updateName)
 	users.PATCH("/email", s.updateEmail)
+	if s.consents != nil {
+		consents := api.Group("/me/consents", s.requireAuth)
+		consents.GET("", s.listConsents)
+		consents.GET("/:id", s.getConsent)
+		consents.DELETE("/:id", s.revokeConsent)
+	}
+	if s.audit != nil {
+		api.GET("/me/access-events", s.requireAuth, s.listAccessEvents)
+		api.GET("/me/security-events", s.requireAuth, s.listSecurityEvents)
+	}
 }
 
 func (s *handler) requestPolicy(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
-	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
+	backchannel := c.Request.URL.Path == oauth.TokenPath || c.Request.URL.Path == oauth.RevocationPath || c.Request.URL.Path == oauth.IntrospectionPath || c.Request.URL.Path == oauth.UserInfoPath || c.Request.URL.Path == "/internal/audit/events" || c.Request.URL.Path == "/internal/authorize/check"
+	if !backchannel && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
 		if origin := c.GetHeader("Origin"); (origin != "" && origin != s.origin) || c.GetHeader("Sec-Fetch-Site") == "cross-site" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "request origin is not allowed"})
 			return
@@ -103,11 +146,11 @@ func serverError(c *gin.Context, err error) {
 
 func respondError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, lib.ErrInvalidInput):
+	case errors.Is(err, identity.ErrInvalidInput):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errors.Is(err, lib.ErrConflict):
+	case errors.Is(err, identity.ErrConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errors.Is(err, lib.ErrUnauthenticated), errors.Is(err, lib.ErrInvalidPasskey):
+	case errors.Is(err, identity.ErrUnauthenticated), errors.Is(err, identity.ErrInvalidPasskey):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 	default:
 		serverError(c, err)

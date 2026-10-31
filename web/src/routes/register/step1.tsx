@@ -3,12 +3,15 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { RegisterNavigation } from './-RegisterNavigation'
 import { useRegistration } from './-RegisterContext'
-import { registrationFields, validateRegistration } from './-validation'
+import {
+  registrationFields,
+  validateRegistration,
+} from '../../lib/validateInputText'
 import type {
   RegistrationErrors,
   RegistrationField,
   RegistrationValues,
-} from './-validation'
+} from '../../lib/validateInputText'
 import { Heading, HeadingTitle } from '#/atoms/Heading'
 import { Divider } from '#/atoms/Divider'
 import {

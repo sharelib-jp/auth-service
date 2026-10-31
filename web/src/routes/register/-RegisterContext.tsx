@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from 'react'
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
-import type { RegistrationValues } from './-validation'
+import type { RegistrationValues } from '../../lib/validateInputText'
 
 type RegistrationContextValue = {
   values: RegistrationValues

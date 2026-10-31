@@ -12,9 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RegisterRouteRouteImport } from './routes/register/route'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
+import { Route as LogoutIndexRouteImport } from './routes/logout/index'
+import { Route as MeIndexRouteImport } from './routes/me/index'
+import { Route as MeConsentsRouteImport } from './routes/me/consents'
 import { Route as RegisterStep1RouteImport } from './routes/register/step1'
 import { Route as RegisterStep2RouteImport } from './routes/register/step2'
 import { Route as RegisterStep3RouteImport } from './routes/register/step3'
+import { Route as Oauth2V1AuthRouteImport } from './routes/oauth2/v1/auth'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -29,6 +33,21 @@ const RegisterRouteRoute = RegisterRouteRouteImport.update({
 const LoginIndexRoute = LoginIndexRouteImport.update({
   id: '/login/',
   path: '/login/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LogoutIndexRoute = LogoutIndexRouteImport.update({
+  id: '/logout/',
+  path: '/logout/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MeIndexRoute = MeIndexRouteImport.update({
+  id: '/me/',
+  path: '/me/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MeConsentsRoute = MeConsentsRouteImport.update({
+  id: '/me/consents',
+  path: '/me/consents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterStep1Route = RegisterStep1RouteImport.update({
@@ -46,63 +65,96 @@ const RegisterStep3Route = RegisterStep3RouteImport.update({
   path: '/step3',
   getParentRoute: () => RegisterRouteRoute,
 } as any)
+const Oauth2V1AuthRoute = Oauth2V1AuthRouteImport.update({
+  id: '/oauth2/v1/auth',
+  path: '/oauth2/v1/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/register': typeof RegisterRouteRouteWithChildren
+  '/me/consents': typeof MeConsentsRoute
   '/register/step1': typeof RegisterStep1Route
   '/register/step2': typeof RegisterStep2Route
   '/register/step3': typeof RegisterStep3Route
   '/login/': typeof LoginIndexRoute
+  '/logout/': typeof LogoutIndexRoute
+  '/me/': typeof MeIndexRoute
+  '/oauth2/v1/auth': typeof Oauth2V1AuthRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/register': typeof RegisterRouteRouteWithChildren
+  '/me/consents': typeof MeConsentsRoute
   '/register/step1': typeof RegisterStep1Route
   '/register/step2': typeof RegisterStep2Route
   '/register/step3': typeof RegisterStep3Route
   '/login': typeof LoginIndexRoute
+  '/logout': typeof LogoutIndexRoute
+  '/me': typeof MeIndexRoute
+  '/oauth2/v1/auth': typeof Oauth2V1AuthRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/register': typeof RegisterRouteRouteWithChildren
+  '/me/consents': typeof MeConsentsRoute
   '/register/step1': typeof RegisterStep1Route
   '/register/step2': typeof RegisterStep2Route
   '/register/step3': typeof RegisterStep3Route
   '/login/': typeof LoginIndexRoute
+  '/logout/': typeof LogoutIndexRoute
+  '/me/': typeof MeIndexRoute
+  '/oauth2/v1/auth': typeof Oauth2V1AuthRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/register'
+    | '/me/consents'
     | '/register/step1'
     | '/register/step2'
     | '/register/step3'
     | '/login/'
+    | '/logout/'
+    | '/me/'
+    | '/oauth2/v1/auth'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/register'
+    | '/me/consents'
     | '/register/step1'
     | '/register/step2'
     | '/register/step3'
     | '/login'
+    | '/logout'
+    | '/me'
+    | '/oauth2/v1/auth'
   id:
     | '__root__'
     | '/'
     | '/register'
+    | '/me/consents'
     | '/register/step1'
     | '/register/step2'
     | '/register/step3'
     | '/login/'
+    | '/logout/'
+    | '/me/'
+    | '/oauth2/v1/auth'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   RegisterRouteRoute: typeof RegisterRouteRouteWithChildren
+  MeConsentsRoute: typeof MeConsentsRoute
   LoginIndexRoute: typeof LoginIndexRoute
+  LogoutIndexRoute: typeof LogoutIndexRoute
+  MeIndexRoute: typeof MeIndexRoute
+  Oauth2V1AuthRoute: typeof Oauth2V1AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -128,6 +180,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/logout/': {
+      id: '/logout/'
+      path: '/logout'
+      fullPath: '/logout/'
+      preLoaderRoute: typeof LogoutIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/me/': {
+      id: '/me/'
+      path: '/me'
+      fullPath: '/me/'
+      preLoaderRoute: typeof MeIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/me/consents': {
+      id: '/me/consents'
+      path: '/me/consents'
+      fullPath: '/me/consents'
+      preLoaderRoute: typeof MeConsentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register/step1': {
       id: '/register/step1'
       path: '/step1'
@@ -148,6 +221,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/register/step3'
       preLoaderRoute: typeof RegisterStep3RouteImport
       parentRoute: typeof RegisterRouteRoute
+    }
+    '/oauth2/v1/auth': {
+      id: '/oauth2/v1/auth'
+      path: '/oauth2/v1/auth'
+      fullPath: '/oauth2/v1/auth'
+      preLoaderRoute: typeof Oauth2V1AuthRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -171,7 +251,11 @@ const RegisterRouteRouteWithChildren = RegisterRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   RegisterRouteRoute: RegisterRouteRouteWithChildren,
+  MeConsentsRoute: MeConsentsRoute,
   LoginIndexRoute: LoginIndexRoute,
+  LogoutIndexRoute: LogoutIndexRoute,
+  MeIndexRoute: MeIndexRoute,
+  Oauth2V1AuthRoute: Oauth2V1AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
