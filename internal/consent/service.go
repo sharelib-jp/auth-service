@@ -23,8 +23,8 @@ type Service struct{ repo Repository }
 
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
-// Create is intended for a future validated authorization flow, not direct
-// use with untrusted request parameters. Authentication scopes are excluded.
+// Create accepts grants from a validated authorization flow, not directly
+// from untrusted request parameters. Authentication-only scopes are excluded.
 func (s *Service) Create(ctx context.Context, grant Grant) (*Grant, error) {
 	if grant.UserID == uuid.Nil || strings.TrimSpace(grant.ClientID) == "" || strings.TrimSpace(grant.Resource) == "" || strings.TrimSpace(grant.PurposeCode) == "" || len(grant.Scopes) == 0 || grant.ConditionsVersion != 0 || len(grant.Conditions) != 0 {
 		return nil, ErrInvalidGrant
@@ -39,7 +39,7 @@ func (s *Service) Create(ctx context.Context, grant Grant) (*Grant, error) {
 	}
 	scopes := make(map[string]struct{}, len(grant.Scopes))
 	for _, scope := range grant.Scopes {
-		if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsAny(scope, " \t\r\n") || scope == "openid" || scope == "profile" || scope == "email" || scope == "address" || scope == "phone" || scope == "offline_access" {
+		if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsAny(scope, " \t\r\n") || scope == "openid" || scope == "address" || scope == "phone" || scope == "offline_access" {
 			return nil, ErrInvalidGrant
 		}
 		scopes[scope] = struct{}{}

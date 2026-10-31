@@ -49,7 +49,7 @@ func NewProvider(store *Store, options ProviderConfig) (fosite.OAuth2Provider, e
 	}
 	conf := &fosite.Config{
 		GlobalSecret: append([]byte(nil), options.HMACSecret...), RotatedGlobalSecrets: options.RotatedHMACSecrets,
-		IDTokenIssuer: options.Issuer, TokenURL: options.Issuer + "/oauth2/token",
+		IDTokenIssuer: options.Issuer, TokenURL: options.Issuer + TokenPath,
 		EnforcePKCE: true, EnablePKCEPlainChallengeMethod: false,
 		ScopeStrategy: fosite.ExactScopeStrategy, AudienceMatchingStrategy: fosite.ExactAudienceMatchingStrategy,
 		AuthorizeCodeLifespan: 5 * time.Minute, AccessTokenLifespan: 5 * time.Minute,

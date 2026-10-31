@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,8 +24,6 @@ func (h *oauthHandler) browserCookieName() string {
 	}
 	return "sharelib_oauth_browser"
 }
-
-var consentPage = template.Must(template.New("consent").Parse(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>情報連携の確認</title></head><body><main><h1>情報連携の確認</h1><p>{{.Client}} が{{if .Resource}} {{.Resource}} の情報へのアクセスを{{else}}ログインを{{end}}要求しています。</p><ul>{{range .Scopes}}<li><strong>{{.Name}}</strong>: {{.Description}}（目的: {{.PurposeCode}}）</li>{{end}}</ul>{{if .Offline}}<p>このサービスは、あなたが利用していない間も許可された情報にアクセスできます。</p>{{end}}<form method="post" action="/oauth2/consent"><input type="hidden" name="request" value="{{.Handle}}"><input type="hidden" name="csrf" value="{{.CSRF}}"><button name="decision" value="allow">許可する</button><button name="decision" value="deny">許可しない</button></form></main></body></html>`))
 
 // prepareAuthorization reconstructs every request from server-held parameters
 // and performs both Fosite's checks and strict application registration checks.
@@ -54,7 +51,7 @@ func (h *oauthHandler) prepareAuthorization(ctx context.Context, values url.Valu
 	if resource := form.Get("resource"); resource != "" {
 		form.Set("audience", resource)
 	}
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, h.issuer+"/oauth2/authorize?"+form.Encode(), nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, h.issuer+oauth.AuthorizePath+"?"+form.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +123,7 @@ func (h *oauthHandler) authorize(c *gin.Context) {
 		return
 	}
 	c.Header("Referrer-Policy", "no-referrer")
-	c.Redirect(http.StatusSeeOther, "/oauth2/continue?request="+url.QueryEscape(handle))
+	c.Redirect(http.StatusSeeOther, oauth.ContinuePath+"?request="+url.QueryEscape(handle))
 }
 
 func (h *oauthHandler) pendingRequest(c *gin.Context, handle string) (string, fosite.AuthorizeRequester, error) {
@@ -172,6 +169,10 @@ func (h *oauthHandler) continueAuthorization(c *gin.Context) {
 		h.authorizeError(c, req, fosite.ErrConsentRequired)
 		return
 	}
+	if decision.NeedsConsent() {
+		c.Redirect(http.StatusSeeOther, "/oauth2/v1/auth?request="+url.QueryEscape(handle))
+		return
+	}
 	snapshot, err := decision.Snapshot()
 	if err != nil {
 		serverError(c, err)
@@ -182,19 +183,79 @@ func (h *oauthHandler) continueAuthorization(c *gin.Context) {
 		serverError(c, err)
 		return
 	}
-	if !decision.NeedsConsent() {
-		h.finishAuthorization(c, handle, browser, csrf, user.ID, authenticatedAt, req, true)
+	h.finishAuthorization(c, handle, browser, csrf, user.ID, authenticatedAt, req, true)
+}
+
+// consentDetails returns only server-validated information bound to the browser
+// and authenticated session. The posted decision is revalidated separately.
+func (h *oauthHandler) consentDetails(c *gin.Context) {
+	c.Header("Referrer-Policy", "no-referrer")
+	if origin := c.GetHeader("Origin"); (origin != "" && origin != h.issuer) || c.GetHeader("Sec-Fetch-Site") == "cross-site" {
+		c.Status(http.StatusForbidden)
 		return
 	}
-	c.Header("Content-Security-Policy", "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	if err := consentPage.Execute(c.Writer, struct {
-		Client, Resource, Handle, CSRF string
-		Scopes                         []oauth.Scope
-		Offline                        bool
-	}{decision.ClientName, decision.Resource.Name, handle, csrf, decision.Scopes, decision.OfflineAccess}); err != nil {
-		_ = c.Error(err)
+	values, err := url.ParseQuery(c.Request.URL.RawQuery)
+	if err != nil || len(values) != 1 || len(values["request"]) != 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
 	}
+	handle := values.Get("request")
+	browser, req, err := h.pendingRequest(c, handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+	user, _, err := h.service.AuthenticateAt(c.Request.Context(), oauthSessionCookie(c, h.secure))
+	if errors.Is(err, identity.ErrUnauthenticated) {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		serverError(c, err)
+		return
+	}
+	decision, err := oauth.NewAuthorizationService(h.db).Evaluate(c.Request.Context(), req, user.ID)
+	if err != nil || !decision.NeedsConsent() || req.GetRequestForm().Get("prompt") == "none" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+	snapshot, err := decision.Snapshot()
+	if err != nil {
+		serverError(c, err)
+		return
+	}
+	csrf, err := h.store.IssueConsentCSRF(c.Request.Context(), handle, browser, user.ID, snapshot)
+	if errors.Is(err, oauth.ErrPendingAuthorization) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+	if err != nil {
+		serverError(c, err)
+		return
+	}
+	type scopeDetails struct {
+		Name           string `json:"name"`
+		Description    string `json:"description"`
+		Purpose        string `json:"purpose"`
+		Resource       string `json:"resource"`
+		AlreadyGranted bool   `json:"already_granted"`
+	}
+	missing := make(map[string]bool, len(decision.Missing))
+	for _, scope := range decision.Missing {
+		missing[scope.Name] = true
+	}
+	scopes := make([]scopeDetails, 0, len(decision.Scopes))
+	for _, scope := range decision.Scopes {
+		resource := decision.Resource.Name
+		if scope.ResourceID == oauth.IdentityResource {
+			resource = "アカウント情報"
+		}
+		scopes = append(scopes, scopeDetails{scope.Name, scope.Description, scope.PurposeCode, resource, !missing[scope.Name]})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"client_name": decision.ClientName, "user_name": user.Name, "user_email": user.Email,
+		"scopes": scopes, "offline_access": decision.OfflineAccess, "csrf": csrf,
+	})
 }
 
 func (h *oauthHandler) consent(c *gin.Context) {
@@ -257,7 +318,7 @@ func (h *oauthHandler) finishAuthorization(c *gin.Context, handle, browser, csrf
 		grants := append([]uuid.UUID(nil), decision.GrantIDs...)
 		service := consent.NewService(consent.NewRepository(tx))
 		for _, scope := range decision.Missing {
-			grant, err := service.Create(ctx, consent.Grant{UserID: userID, ClientID: req.GetClient().GetID(), Resource: decision.Resource.Identifier, Scopes: []string{scope.Name}, PurposeCode: scope.PurposeCode, PolicyVersion: scope.PolicyVersion})
+			grant, err := service.Create(ctx, consent.Grant{UserID: userID, ClientID: req.GetClient().GetID(), Resource: oauth.ConsentResource(scope, decision.Resource), Scopes: []string{scope.Name}, PurposeCode: scope.PurposeCode, PolicyVersion: scope.PolicyVersion})
 			if err != nil {
 				return err
 			}

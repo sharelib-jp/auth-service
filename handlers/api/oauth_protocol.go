@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ory/fosite"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -17,10 +18,10 @@ import (
 func (h *oauthHandler) metadata() gin.H {
 	return gin.H{
 		"issuer":                                h.issuer,
-		"authorization_endpoint":                h.issuer + "/oauth2/authorize",
-		"token_endpoint":                        h.issuer + "/oauth2/token",
-		"revocation_endpoint":                   h.issuer + "/oauth2/revoke",
-		"introspection_endpoint":                h.issuer + "/oauth2/introspect",
+		"authorization_endpoint":                h.issuer + oauth.AuthorizePath,
+		"token_endpoint":                        h.issuer + oauth.TokenPath,
+		"revocation_endpoint":                   h.issuer + oauth.RevocationPath,
+		"introspection_endpoint":                h.issuer + oauth.IntrospectionPath,
 		"jwks_uri":                              h.issuer + "/.well-known/jwks.json",
 		"response_types_supported":              []string{"code"},
 		"response_modes_supported":              []string{"query"},
@@ -32,10 +33,11 @@ func (h *oauthHandler) metadata() gin.H {
 
 func (h *oauthHandler) openIDDiscovery(c *gin.Context) {
 	metadata := h.metadata()
-	metadata["userinfo_endpoint"] = h.issuer + "/userinfo"
+	metadata["userinfo_endpoint"] = h.issuer + oauth.UserInfoPath
 	metadata["subject_types_supported"] = []string{"public"}
+	metadata["scopes_supported"] = []string{"openid", "profile", "email", "offline_access"}
 	metadata["id_token_signing_alg_values_supported"] = []string{"RS256"}
-	metadata["claims_supported"] = []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce"}
+	metadata["claims_supported"] = []string{"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce", "name", "preferred_username", "email"}
 	c.JSON(http.StatusOK, metadata)
 }
 
@@ -205,5 +207,23 @@ func (h *oauthHandler) userinfo(c *gin.Context) {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"sub": request.GetSession().GetSubject()})
+	user, err := h.service.UserInfo(c.Request.Context(), request.GetSession().GetSubject())
+	if errors.Is(err, identity.ErrUnauthenticated) {
+		c.Header("WWW-Authenticate", `Bearer error="invalid_token"`)
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		serverError(c, err)
+		return
+	}
+	claims := gin.H{"sub": user.ID.String()}
+	if request.GetGrantedScopes().Has("profile") {
+		claims["name"] = user.Name
+		claims["preferred_username"] = user.UserName
+	}
+	if request.GetGrantedScopes().Has("email") {
+		claims["email"] = user.Email
+	}
+	c.JSON(http.StatusOK, claims)
 }

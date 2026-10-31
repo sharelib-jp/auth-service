@@ -39,7 +39,9 @@ function LoginPageComponent() {
     })
       .then((response) => {
         if (response.ok) {
-          window.location.replace(`/oauth2/continue?request=${oauthRequest}`)
+          window.location.replace(
+            `/api/oauth2/continue?request=${oauthRequest}`,
+          )
         }
       })
       .catch(() => {})
@@ -97,7 +99,7 @@ function LoginPageComponent() {
 
       const loggedInUser: LoginUser = await finishResponse.json()
       if (oauthRequest) {
-        window.location.replace(`/oauth2/continue?request=${oauthRequest}`)
+        window.location.replace(`/api/oauth2/continue?request=${oauthRequest}`)
         return
       }
       setUser(loggedInUser)

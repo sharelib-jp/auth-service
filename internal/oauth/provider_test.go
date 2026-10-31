@@ -41,7 +41,7 @@ func TestFositeCodePKCEAndIDToken(t *testing.T) {
 		"code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])},
 	}
 	ctx := context.Background()
-	authReq, err := provider.NewAuthorizeRequest(ctx, httptest.NewRequest(http.MethodGet, "https://issuer.example/oauth2/authorize?"+authValues.Encode(), nil))
+	authReq, err := provider.NewAuthorizeRequest(ctx, httptest.NewRequest(http.MethodGet, "https://issuer.example/api/oauth2/authorize?"+authValues.Encode(), nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestFositeCodePKCEAndIDToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	values := url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {response.GetCode()}, "redirect_uri": {"https://client.example/callback"}, "code_verifier": {verifier}}
-	tokenReq := httptest.NewRequest(http.MethodPost, "https://issuer.example/oauth2/token", strings.NewReader(values.Encode()))
+	tokenReq := httptest.NewRequest(http.MethodPost, "https://issuer.example/api/oauth2/token", strings.NewReader(values.Encode()))
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	accessReq, err := provider.NewAccessRequest(ctx, tokenReq, oauth.NewSession())
 	if err != nil {
@@ -138,7 +138,7 @@ func newFlowFixture(t *testing.T) flowFixture {
 	hash := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://client.example/callback"}, "scope": {"openid offline_access b.orders.read"}, "audience": {"https://b.example/api"}, "state": {strings.Repeat("s", 32)}, "nonce": {strings.Repeat("n", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])}}
 	ctx := context.Background()
-	req, err := provider.NewAuthorizeRequest(ctx, httptest.NewRequest("GET", "https://issuer.example/oauth2/authorize?"+values.Encode(), nil))
+	req, err := provider.NewAuthorizeRequest(ctx, httptest.NewRequest("GET", "https://issuer.example/api/oauth2/authorize?"+values.Encode(), nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func newFlowFixture(t *testing.T) flowFixture {
 }
 
 func (f flowFixture) exchange(values url.Values) (fosite.AccessResponder, error) {
-	req := httptest.NewRequest("POST", "https://issuer.example/oauth2/token", strings.NewReader(values.Encode()))
+	req := httptest.NewRequest("POST", "https://issuer.example/api/oauth2/token", strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	ctx := context.Background()
 	access, err := f.provider.NewAccessRequest(ctx, req, oauth.NewSession())

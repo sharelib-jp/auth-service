@@ -178,7 +178,7 @@ func (c *Catalog) saveClient(ctx context.Context, client Client, secret string, 
 			}
 			seen[name] = true
 			if isIdentityScope(name) {
-				if name != "openid" && name != "offline_access" {
+				if name != "openid" && name != "offline_access" && name != "profile" && name != "email" {
 					return ErrInvalidRegistration
 				}
 				continue

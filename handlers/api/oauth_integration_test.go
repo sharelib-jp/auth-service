@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -100,6 +99,29 @@ func oauthHTTP(client *testClient, method, path string, body url.Values, origin 
 	return rec
 }
 
+// oauthReview follows the API redirect to the consent page and fetches the
+// server-validated data the frontend uses to submit a decision.
+func oauthReview(t *testing.T, client *testClient, continuePath string) (*httptest.ResponseRecorder, string) {
+	t.Helper()
+	location, err := url.Parse(continuePath)
+	if err != nil || location.Query().Get("request") == "" {
+		t.Fatalf("invalid continuation URL: %q", continuePath)
+	}
+	handle := location.Query().Get("request")
+	page := oauthHTTP(client, "GET", continuePath, nil, "")
+	if page.Code != http.StatusSeeOther || page.Header().Get("Location") != "/oauth2/v1/auth?request="+url.QueryEscape(handle) {
+		t.Fatalf("expected consent page redirect: %d %s", page.Code, page.Header().Get("Location"))
+	}
+	details := oauthHTTP(client, "GET", "/api/oauth2/consent?request="+url.QueryEscape(handle), nil, "")
+	var payload struct {
+		CSRF string `json:"csrf"`
+	}
+	if details.Code != http.StatusOK || json.Unmarshal(details.Body.Bytes(), &payload) != nil || len(payload.CSRF) != 43 {
+		t.Fatalf("invalid consent details: %d %s", details.Code, details.Body.String())
+	}
+	return details, payload.CSRF
+}
+
 func TestOAuthHTTPLoginConsentAndRevocation(t *testing.T) {
 	client, db := oauthTestService(t)
 	authenticator, user := client.register(t, "oauthuser")
@@ -107,7 +129,7 @@ func TestOAuthHTTPLoginConsentAndRevocation(t *testing.T) {
 	verifier := strings.Repeat("v", 43)
 	challenge := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid offline_access b.orders.read"}, "resource": {"https://b.example/api"}, "state": {strings.Repeat("s", 32)}, "nonce": {strings.Repeat("n", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(challenge[:])}}
-	start := oauthHTTP(client, "GET", "/oauth2/authorize?"+values.Encode(), nil, "")
+	start := oauthHTTP(client, "GET", "/api/oauth2/authorize?"+values.Encode(), nil, "")
 	if start.Code != 303 {
 		t.Fatalf("authorize: %d %s", start.Code, start.Body.String())
 	}
@@ -118,24 +140,20 @@ func TestOAuthHTTPLoginConsentAndRevocation(t *testing.T) {
 	}
 	login := optionsFrom(t, client.do(t, "POST", "/api/auth/login/begin", nil, http.StatusOK))
 	client.do(t, "POST", "/api/auth/login/finish", authenticator.assertion(t, login.PublicKey.Challenge, testOrigin, 1, true), http.StatusOK)
-	page := oauthHTTP(client, "GET", continuePath, nil, "")
-	if page.Code != 200 || !strings.Contains(page.Body.String(), "注文履歴を読む") {
+	page, csrf := oauthReview(t, client, continuePath)
+	if !strings.Contains(page.Body.String(), "注文履歴を読む") {
 		t.Fatalf("consent page: %d %s", page.Code, page.Body.String())
 	}
-	csrfMatch := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())
 	requestURL, _ := url.Parse(continuePath)
-	if len(csrfMatch) != 2 {
-		t.Fatalf("missing CSRF: %s", page.Body.String())
-	}
-	decision := url.Values{"request": {requestURL.Query().Get("request")}, "csrf": {csrfMatch[1]}, "decision": {"allow"}}
-	if response := oauthHTTP(client, "POST", "/oauth2/consent", decision, "https://attacker.example"); response.Code != 403 {
+	decision := url.Values{"request": {requestURL.Query().Get("request")}, "csrf": {csrf}, "decision": {"allow"}}
+	if response := oauthHTTP(client, "POST", "/api/oauth2/consent", decision, "https://attacker.example"); response.Code != 403 {
 		t.Fatalf("CSRF origin: %d", response.Code)
 	}
 	badDecision := url.Values{"request": {decision.Get("request")}, "csrf": {strings.Repeat("x", 43)}, "decision": {"allow"}}
-	if response := oauthHTTP(client, "POST", "/oauth2/consent", badDecision, testOrigin); response.Code != 403 {
+	if response := oauthHTTP(client, "POST", "/api/oauth2/consent", badDecision, testOrigin); response.Code != 403 {
 		t.Fatalf("invalid CSRF: %d", response.Code)
 	}
-	approved := oauthHTTP(client, "POST", "/oauth2/consent", decision, testOrigin)
+	approved := oauthHTTP(client, "POST", "/api/oauth2/consent", decision, testOrigin)
 	if approved.Code != 303 {
 		t.Fatalf("approve: %d %s", approved.Code, approved.Body.String())
 	}
@@ -144,7 +162,7 @@ func TestOAuthHTTPLoginConsentAndRevocation(t *testing.T) {
 		t.Fatalf("callback: %s %v", approved.Header().Get("Location"), err)
 	}
 	tokenValues := url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}
-	token := oauthHTTP(client, "POST", "/oauth2/token", tokenValues, "")
+	token := oauthHTTP(client, "POST", "/api/oauth2/token", tokenValues, "")
 	if token.Code != 200 {
 		t.Fatalf("token: %d %s", token.Code, token.Body.String())
 	}
@@ -157,7 +175,7 @@ func TestOAuthHTTPLoginConsentAndRevocation(t *testing.T) {
 		t.Fatalf("token response: %s %v", token.Body.String(), err)
 	}
 	introspect := func(value string) map[string]any {
-		req := httptest.NewRequest("POST", testOrigin+"/oauth2/introspect", strings.NewReader(url.Values{"token": {value}}.Encode()))
+		req := httptest.NewRequest("POST", testOrigin+"/api/oauth2/introspect", strings.NewReader(url.Values{"token": {value}}.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.SetBasicAuth("b-server", strings.Repeat("p", 32))
 		rec := httptest.NewRecorder()
@@ -181,7 +199,7 @@ func TestOAuthHTTPLoginConsentAndRevocation(t *testing.T) {
 	if err := catalog.RegisterResourceCredential(t.Context(), "other-server", "other", strings.Repeat("q", 32)); err != nil {
 		t.Fatal(err)
 	}
-	otherReq := httptest.NewRequest("POST", testOrigin+"/oauth2/introspect", strings.NewReader(url.Values{"token": {tokens.Access}}.Encode()))
+	otherReq := httptest.NewRequest("POST", testOrigin+"/api/oauth2/introspect", strings.NewReader(url.Values{"token": {tokens.Access}}.Encode()))
 	otherReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	otherReq.SetBasicAuth("other-server", strings.Repeat("q", 32))
 	otherResponse := httptest.NewRecorder()
@@ -203,7 +221,7 @@ func TestOAuthHTTPLoginConsentAndRevocation(t *testing.T) {
 	if result := introspect(tokens.Access); result["active"] != false {
 		t.Fatalf("revoked token: %v", result)
 	}
-	refresh := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {tokens.Refresh}}, "")
+	refresh := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {tokens.Refresh}}, "")
 	if refresh.Code == 200 {
 		t.Fatalf("refresh after revocation: %s", refresh.Body.String())
 	}
@@ -338,23 +356,19 @@ func TestConcurrentRefreshReuseRevokesWinningFamily(t *testing.T) {
 	verifier := strings.Repeat("v", 43)
 	hash := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid offline_access b.orders.read"}, "resource": {"https://b.example/api"}, "state": {strings.Repeat("s", 32)}, "nonce": {strings.Repeat("n", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])}}
-	start := oauthHTTP(client, "GET", "/oauth2/authorize?"+values.Encode(), nil, "")
+	start := oauthHTTP(client, "GET", "/api/oauth2/authorize?"+values.Encode(), nil, "")
 	if start.Code != 303 {
 		t.Fatalf("authorize: %d %s", start.Code, start.Body.String())
 	}
 	continuePath := start.Header().Get("Location")
-	page := oauthHTTP(client, "GET", continuePath, nil, "")
-	csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())
-	if len(csrf) != 2 {
-		t.Fatalf("consent: %d %s", page.Code, page.Body.String())
-	}
+	_, csrf := oauthReview(t, client, continuePath)
 	continueURL, _ := url.Parse(continuePath)
-	approved := oauthHTTP(client, "POST", "/oauth2/consent", url.Values{"request": {continueURL.Query().Get("request")}, "csrf": {csrf[1]}, "decision": {"allow"}}, testOrigin)
+	approved := oauthHTTP(client, "POST", "/api/oauth2/consent", url.Values{"request": {continueURL.Query().Get("request")}, "csrf": {csrf}, "decision": {"allow"}}, testOrigin)
 	callback, _ := url.Parse(approved.Header().Get("Location"))
 	if approved.Code != 303 || callback.Query().Get("code") == "" {
 		t.Fatalf("approval: %d %s", approved.Code, approved.Body.String())
 	}
-	initial := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}, "")
+	initial := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}, "")
 	var tokens struct {
 		Refresh string `json:"refresh_token"`
 	}
@@ -375,7 +389,7 @@ func TestConcurrentRefreshReuseRevokesWinningFamily(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func() {
 			started <- struct{}{}
-			results <- oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {tokens.Refresh}}, "")
+			results <- oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {tokens.Refresh}}, "")
 		}()
 	}
 	<-started
@@ -406,7 +420,7 @@ func TestConcurrentRefreshReuseRevokesWinningFamily(t *testing.T) {
 	if statuses[200] != 1 || winner == "" {
 		t.Fatalf("expected one successful refresh: %v", statuses)
 	}
-	req := httptest.NewRequest("POST", testOrigin+"/oauth2/introspect", strings.NewReader(url.Values{"token": {winner}}.Encode()))
+	req := httptest.NewRequest("POST", testOrigin+"/api/oauth2/introspect", strings.NewReader(url.Values{"token": {winner}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth("b-server", strings.Repeat("p", 32))
 	rec := httptest.NewRecorder()
@@ -426,23 +440,19 @@ func TestConsentDenialAndPolicyChangeDuringReview(t *testing.T) {
 	hash := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid b.orders.read"}, "resource": {"https://b.example/api"}, "state": {strings.Repeat("s", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])}}
 	startReview := func() url.Values {
-		start := oauthHTTP(client, "GET", "/oauth2/authorize?"+values.Encode(), nil, "")
+		start := oauthHTTP(client, "GET", "/api/oauth2/authorize?"+values.Encode(), nil, "")
 		if start.Code != 303 {
 			t.Fatalf("authorize: %d %s", start.Code, start.Body.String())
 		}
-		page := oauthHTTP(client, "GET", start.Header().Get("Location"), nil, "")
-		csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())
-		if len(csrf) != 2 {
-			t.Fatalf("consent: %d %s", page.Code, page.Body.String())
-		}
+		_, csrf := oauthReview(t, client, start.Header().Get("Location"))
 		location, _ := url.Parse(start.Header().Get("Location"))
-		return url.Values{"request": {location.Query().Get("request")}, "csrf": {csrf[1]}, "decision": {"allow"}}
+		return url.Values{"request": {location.Query().Get("request")}, "csrf": {csrf}, "decision": {"allow"}}
 	}
 	decision := startReview()
 	if err := oauth.NewCatalog(db).UpdateScopePolicy(t.Context(), "read", "条件変更後の説明", "newpurpose"); err != nil {
 		t.Fatal(err)
 	}
-	if rec := oauthHTTP(client, "POST", "/oauth2/consent", decision, testOrigin); rec.Code != 403 {
+	if rec := oauthHTTP(client, "POST", "/api/oauth2/consent", decision, testOrigin); rec.Code != 403 {
 		t.Fatalf("changed consent accepted: %d %s", rec.Code, rec.Body.String())
 	}
 	var count int64
@@ -451,7 +461,7 @@ func TestConsentDenialAndPolicyChangeDuringReview(t *testing.T) {
 	}
 	decision = startReview()
 	decision.Set("decision", "deny")
-	denied := oauthHTTP(client, "POST", "/oauth2/consent", decision, testOrigin)
+	denied := oauthHTTP(client, "POST", "/api/oauth2/consent", decision, testOrigin)
 	location, _ := url.Parse(denied.Header().Get("Location"))
 	if denied.Code != 303 || location.Query().Get("error") != "access_denied" || location.Query().Get("state") != values.Get("state") {
 		t.Fatalf("denial: %d %s", denied.Code, denied.Header().Get("Location"))
@@ -467,7 +477,7 @@ func TestOIDCLoginOnlyUserinfo(t *testing.T) {
 	verifier := strings.Repeat("v", 43)
 	hash := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid"}, "state": {strings.Repeat("s", 32)}, "nonce": {strings.Repeat("n", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])}}
-	start := oauthHTTP(client, "GET", "/oauth2/authorize?"+values.Encode(), nil, "")
+	start := oauthHTTP(client, "GET", "/api/oauth2/authorize?"+values.Encode(), nil, "")
 	if start.Code != 303 {
 		t.Fatalf("authorize: %d %s", start.Code, start.Body.String())
 	}
@@ -476,7 +486,7 @@ func TestOIDCLoginOnlyUserinfo(t *testing.T) {
 	if err != nil || finish.Code != 303 || callback.Query().Get("code") == "" {
 		t.Fatalf("callback: %d %s", finish.Code, finish.Body.String())
 	}
-	response := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}, "")
+	response := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}, "")
 	var tokens struct {
 		Access  string `json:"access_token"`
 		ID      string `json:"id_token"`
@@ -489,7 +499,7 @@ func TestOIDCLoginOnlyUserinfo(t *testing.T) {
 		token  string
 		status int
 	}{{tokens.Access, 200}, {tokens.ID, 401}} {
-		req := httptest.NewRequest("GET", testOrigin+"/userinfo", nil)
+		req := httptest.NewRequest("GET", testOrigin+"/api/userinfo", nil)
 		req.Header.Set("Authorization", "Bearer "+check.token)
 		rec := httptest.NewRecorder()
 		client.handler.ServeHTTP(rec, req)
@@ -497,7 +507,7 @@ func TestOIDCLoginOnlyUserinfo(t *testing.T) {
 			t.Fatalf("userinfo: %d %s", rec.Code, rec.Body.String())
 		}
 	}
-	postUserinfo := httptest.NewRequest("POST", testOrigin+"/userinfo", nil)
+	postUserinfo := httptest.NewRequest("POST", testOrigin+"/api/userinfo", nil)
 	postUserinfo.Header.Set("Authorization", "Bearer "+tokens.Access)
 	postUserinfo.Header.Set("Origin", "https://c.example")
 	postResponse := httptest.NewRecorder()
@@ -507,19 +517,19 @@ func TestOIDCLoginOnlyUserinfo(t *testing.T) {
 	}
 	restore := failInserts(t, db, "audit_security_events", "audit failure")
 	revokeForm := url.Values{"client_id": {"client"}, "token": {tokens.Access}}
-	failed := oauthHTTP(client, "POST", "/oauth2/revoke", revokeForm, "")
+	failed := oauthHTTP(client, "POST", "/api/oauth2/revoke", revokeForm, "")
 	if failed.Code != 503 {
 		t.Fatalf("failed revocation reported success: %d %s", failed.Code, failed.Body.String())
 	}
 	restore()
-	stillActive := httptest.NewRequest("GET", testOrigin+"/userinfo", nil)
+	stillActive := httptest.NewRequest("GET", testOrigin+"/api/userinfo", nil)
 	stillActive.Header.Set("Authorization", "Bearer "+tokens.Access)
 	activeResponse := httptest.NewRecorder()
 	client.handler.ServeHTTP(activeResponse, stillActive)
 	if activeResponse.Code != 200 {
 		t.Fatalf("failed revocation did not roll back: %d", activeResponse.Code)
 	}
-	revoked := oauthHTTP(client, "POST", "/oauth2/revoke", revokeForm, "")
+	revoked := oauthHTTP(client, "POST", "/api/oauth2/revoke", revokeForm, "")
 	if revoked.Code != 200 {
 		t.Fatalf("revocation: %d %s", revoked.Code, revoked.Body.String())
 	}
@@ -536,23 +546,23 @@ func TestOAuthProtocolRejectsOversizedAndDuplicateFields(t *testing.T) {
 		{"grant_type": {"authorization_code", "refresh_token"}},
 		{"grant_type": {"authorization_code"}, "code": {strings.Repeat(".", 5000)}},
 	} {
-		response := oauthHTTP(client, "POST", "/oauth2/token", body, "")
+		response := oauthHTTP(client, "POST", "/api/oauth2/token", body, "")
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("invalid form: %d %s", response.Code, response.Body.String())
 		}
 	}
-	response := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "resource": {"https://other.example/api"}}, "")
+	response := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "resource": {"https://other.example/api"}}, "")
 	if response.Code != 400 {
 		t.Fatalf("token resource was silently ignored: %d %s", response.Code, response.Body.String())
 	}
 	query := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid"}, "state": {strings.Repeat("s", 32)}, "code_challenge_method": {"plain"}, "code_challenge": {strings.Repeat("v", 43)}}
-	response = oauthHTTP(client, "GET", "/oauth2/authorize?"+query.Encode(), nil, "")
+	response = oauthHTTP(client, "GET", "/api/oauth2/authorize?"+query.Encode(), nil, "")
 	location, _ := url.Parse(response.Header().Get("Location"))
 	if response.Code != 303 || location.Query().Get("error") != "invalid_request" {
 		t.Fatalf("plain PKCE accepted: %d %s", response.Code, response.Body.String())
 	}
 	query.Set("redirect_uri", "https://c.example/callback/other")
-	response = oauthHTTP(client, "GET", "/oauth2/authorize?"+query.Encode(), nil, "")
+	response = oauthHTTP(client, "GET", "/api/oauth2/authorize?"+query.Encode(), nil, "")
 	if response.Code == 303 {
 		t.Fatalf("unregistered redirect accepted: %s", response.Header().Get("Location"))
 	}
@@ -577,20 +587,27 @@ func TestAdditionalScopeRequiresOnlyNewConsent(t *testing.T) {
 	hash := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid b.orders.read"}, "resource": {"https://b.example/api"}, "state": {strings.Repeat("s", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])}}
 	authorize := func() (*httptest.ResponseRecorder, string) {
-		start := oauthHTTP(client, "GET", "/oauth2/authorize?"+values.Encode(), nil, "")
+		start := oauthHTTP(client, "GET", "/api/oauth2/authorize?"+values.Encode(), nil, "")
 		if start.Code != 303 {
 			t.Fatalf("authorize: %d %s", start.Code, start.Body.String())
 		}
 		path := start.Header().Get("Location")
-		return oauthHTTP(client, "GET", path, nil, ""), path
+		page := oauthHTTP(client, "GET", path, nil, "")
+		if strings.HasPrefix(page.Header().Get("Location"), "/oauth2/v1/auth?") {
+			parsed, _ := url.Parse(path)
+			page = oauthHTTP(client, "GET", "/api/oauth2/consent?request="+url.QueryEscape(parsed.Query().Get("request")), nil, "")
+		}
+		return page, path
 	}
 	approve := func(page *httptest.ResponseRecorder, path string) {
-		csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())
-		if len(csrf) != 2 {
-			t.Fatalf("consent page: %d %s", page.Code, page.Body.String())
+		var details struct {
+			CSRF string `json:"csrf"`
+		}
+		if page.Code != http.StatusOK || json.Unmarshal(page.Body.Bytes(), &details) != nil || len(details.CSRF) != 43 {
+			t.Fatalf("consent details: %d %s", page.Code, page.Body.String())
 		}
 		parsed, _ := url.Parse(path)
-		response := oauthHTTP(client, "POST", "/oauth2/consent", url.Values{"request": {parsed.Query().Get("request")}, "csrf": {csrf[1]}, "decision": {"allow"}}, testOrigin)
+		response := oauthHTTP(client, "POST", "/api/oauth2/consent", url.Values{"request": {parsed.Query().Get("request")}, "csrf": {details.CSRF}, "decision": {"allow"}}, testOrigin)
 		if response.Code != 303 {
 			t.Fatalf("approve: %d %s", response.Code, response.Body.String())
 		}
@@ -641,7 +658,7 @@ func TestConfidentialClientAuthentication(t *testing.T) {
 	verifier := strings.Repeat("v", 43)
 	hash := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid"}, "state": {strings.Repeat("s", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])}}
-	start := oauthHTTP(client, "GET", "/oauth2/authorize?"+values.Encode(), nil, "")
+	start := oauthHTTP(client, "GET", "/api/oauth2/authorize?"+values.Encode(), nil, "")
 	if start.Code != 303 {
 		t.Fatalf("authorize: %d %s", start.Code, start.Body.String())
 	}
@@ -652,7 +669,7 @@ func TestConfidentialClientAuthentication(t *testing.T) {
 	}
 	form := url.Values{"grant_type": {"authorization_code"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}
 	request := func(password string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest("POST", testOrigin+"/oauth2/token", strings.NewReader(form.Encode()))
+		req := httptest.NewRequest("POST", testOrigin+"/api/oauth2/token", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		if password != "" {
 			req.SetBasicAuth("client", password)
@@ -699,22 +716,18 @@ func TestRefreshScopeNarrowingAndPartialConsentRevocation(t *testing.T) {
 	verifier := strings.Repeat("v", 43)
 	hash := sha256.Sum256([]byte(verifier))
 	values := url.Values{"client_id": {"client"}, "response_type": {"code"}, "redirect_uri": {"https://c.example/callback"}, "scope": {"openid offline_access b.orders.read b.orders.write"}, "resource": {"https://b.example/api"}, "state": {strings.Repeat("s", 32)}, "code_challenge_method": {"S256"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(hash[:])}}
-	start := oauthHTTP(client, "GET", "/oauth2/authorize?"+values.Encode(), nil, "")
+	start := oauthHTTP(client, "GET", "/api/oauth2/authorize?"+values.Encode(), nil, "")
 	if start.Code != 303 {
 		t.Fatalf("authorize: %d %s", start.Code, start.Body.String())
 	}
-	page := oauthHTTP(client, "GET", start.Header().Get("Location"), nil, "")
-	csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())
-	if len(csrf) != 2 {
-		t.Fatalf("consent: %d %s", page.Code, page.Body.String())
-	}
+	_, csrf := oauthReview(t, client, start.Header().Get("Location"))
 	continueURL, _ := url.Parse(start.Header().Get("Location"))
-	approved := oauthHTTP(client, "POST", "/oauth2/consent", url.Values{"request": {continueURL.Query().Get("request")}, "csrf": {csrf[1]}, "decision": {"allow"}}, testOrigin)
+	approved := oauthHTTP(client, "POST", "/api/oauth2/consent", url.Values{"request": {continueURL.Query().Get("request")}, "csrf": {csrf}, "decision": {"allow"}}, testOrigin)
 	callback, _ := url.Parse(approved.Header().Get("Location"))
 	if approved.Code != 303 || callback.Query().Get("code") == "" {
 		t.Fatalf("approval: %d %s", approved.Code, approved.Body.String())
 	}
-	initial := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}, "")
+	initial := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "code": {callback.Query().Get("code")}, "redirect_uri": {"https://c.example/callback"}, "code_verifier": {verifier}}, "")
 	type tokenResponse struct {
 		Access  string `json:"access_token"`
 		Refresh string `json:"refresh_token"`
@@ -724,12 +737,12 @@ func TestRefreshScopeNarrowingAndPartialConsentRevocation(t *testing.T) {
 	if initial.Code != 200 || json.Unmarshal(initial.Body.Bytes(), &original) != nil || original.Refresh == "" {
 		t.Fatalf("initial token: %d %s", initial.Code, initial.Body.String())
 	}
-	invalid := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {original.Refresh}, "scope": {"b.projects.read"}}, "")
+	invalid := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {original.Refresh}, "scope": {"b.projects.read"}}, "")
 	if invalid.Code != 400 || !strings.Contains(invalid.Body.String(), "invalid_scope") {
 		t.Fatalf("scope escalation: %d %s", invalid.Code, invalid.Body.String())
 	}
 	refresh := func(token, scope string) tokenResponse {
-		res := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {token}, "scope": {scope}}, "")
+		res := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {token}, "scope": {scope}}, "")
 		var out tokenResponse
 		if res.Code != 200 || json.Unmarshal(res.Body.Bytes(), &out) != nil || out.Access == "" || out.Refresh == "" || out.Scope != scope {
 			t.Fatalf("narrow refresh: %d %s", res.Code, res.Body.String())
@@ -756,7 +769,7 @@ func TestRefreshScopeNarrowingAndPartialConsentRevocation(t *testing.T) {
 		t.Fatal("missing read grant")
 	}
 	client.do(t, "DELETE", "/api/me/consents/"+readGrant, nil, 204)
-	introspection := httptest.NewRequest("POST", testOrigin+"/oauth2/introspect", strings.NewReader(url.Values{"token": {writeOnly.Access}}.Encode()))
+	introspection := httptest.NewRequest("POST", testOrigin+"/api/oauth2/introspect", strings.NewReader(url.Values{"token": {writeOnly.Access}}.Encode()))
 	introspection.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	introspection.SetBasicAuth("b-server", strings.Repeat("p", 32))
 	rec := httptest.NewRecorder()
@@ -768,7 +781,7 @@ func TestRefreshScopeNarrowingAndPartialConsentRevocation(t *testing.T) {
 	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &result) != nil || !result.Active || result.Scope != "b.orders.write" {
 		t.Fatalf("unrelated narrowed token revoked: %d %s", rec.Code, rec.Body.String())
 	}
-	res := oauthHTTP(client, "POST", "/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {writeOnly.Refresh}}, "")
+	res := oauthHTTP(client, "POST", "/api/oauth2/token", url.Values{"grant_type": {"refresh_token"}, "client_id": {"client"}, "refresh_token": {writeOnly.Refresh}}, "")
 	if res.Code == 200 {
 		t.Fatal("refresh token linked to revoked consent remained valid")
 	}

@@ -14,10 +14,12 @@ import (
 	"github.com/sharelib-jp/auth-service/internal/audit"
 	"github.com/sharelib-jp/auth-service/internal/consent"
 	"github.com/sharelib-jp/auth-service/internal/identity"
+	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"gorm.io/gorm"
 )
 
 type handler struct {
+	db       *gorm.DB
 	service  *identity.Service
 	origin   string
 	secure   bool
@@ -39,7 +41,7 @@ func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &handler{service: service, origin: conf.Origin(), secure: strings.HasPrefix(conf.Origin(), "https://"), consents: consent.NewService(consent.NewRepository(db)), audit: audit.NewService(db)}
+	s := &handler{db: db, service: service, origin: conf.Origin(), secure: strings.HasPrefix(conf.Origin(), "https://"), consents: consent.NewService(consent.NewRepository(db)), audit: audit.NewService(db)}
 	router := gin.New()
 	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipQueryString: true}), gin.Recovery(), s.requestPolicy)
 	if err := router.SetTrustedProxies(nil); err != nil {
@@ -107,7 +109,7 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 func (s *handler) requestPolicy(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
-	backchannel := c.Request.URL.Path == "/oauth2/token" || c.Request.URL.Path == "/oauth2/revoke" || c.Request.URL.Path == "/oauth2/introspect" || c.Request.URL.Path == "/userinfo" || c.Request.URL.Path == "/internal/audit/events" || c.Request.URL.Path == "/internal/authorize/check"
+	backchannel := c.Request.URL.Path == oauth.TokenPath || c.Request.URL.Path == oauth.RevocationPath || c.Request.URL.Path == oauth.IntrospectionPath || c.Request.URL.Path == oauth.UserInfoPath || c.Request.URL.Path == "/internal/audit/events" || c.Request.URL.Path == "/internal/authorize/check"
 	if !backchannel && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
 		if origin := c.GetHeader("Origin"); (origin != "" && origin != s.origin) || c.GetHeader("Sec-Fetch-Site") == "cross-site" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "request origin is not allowed"})

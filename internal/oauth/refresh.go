@@ -65,7 +65,7 @@ func (s *Store) NarrowRefreshRequest(ctx context.Context, request fosite.AccessR
 		}
 	}
 	for _, name := range requested {
-		if !isIdentityScope(name) && !covered[name] {
+		if name != "openid" && name != "offline_access" && !covered[name] {
 			return fosite.ErrInvalidGrant
 		}
 	}

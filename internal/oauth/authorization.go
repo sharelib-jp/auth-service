@@ -100,10 +100,14 @@ func (s *AuthorizationService) Evaluate(ctx context.Context, req fosite.Authoriz
 		if !fosite.Arguments(client.Scopes).Has(name) {
 			return nil, fosite.ErrInvalidScope
 		}
-		if isIdentityScope(name) && name != "openid" && name != "offline_access" {
+		if isIdentityScope(name) && name != "openid" && name != "offline_access" && name != "profile" && name != "email" {
 			return nil, fosite.ErrInvalidScope
 		}
-		if !isIdentityScope(name) {
+		if name == "profile" || name == "email" {
+			if !req.GetRequestedScopes().Has("openid") {
+				return nil, fosite.ErrInvalidScope
+			}
+		} else if !isIdentityScope(name) {
 			names = append(names, name)
 		}
 	}
@@ -126,28 +130,33 @@ func (s *AuthorizationService) Evaluate(ctx context.Context, req fosite.Authoriz
 			return nil, err
 		}
 	}
-	if len(names) == 0 {
+	if len(names) == 0 && decision.OfflineAccess {
 		// Refresh tokens must be tied to a revocable business-data consent.
-		if decision.OfflineAccess {
-			return nil, fosite.ErrInvalidScope
-		}
-		return decision, nil
+		return nil, fosite.ErrInvalidScope
 	}
+	for _, name := range []string{"profile", "email"} {
+		if req.GetRequestedScopes().Has(name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
 	seenGrants := make(map[uuid.UUID]bool)
 	for _, name := range names {
-		var scope Scope
-		query = db.Where("name = ? AND resource_id = ? AND status = ?", name, decision.Resource.ID, "active")
-		if s.lock {
-			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
-		}
-		if err := query.First(&scope).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fosite.ErrInvalidScope
-		} else if err != nil {
-			return nil, err
+		scope, identity := identityScope(name)
+		if !identity {
+			query := db.Where("name = ? AND resource_id = ? AND status = ?", name, decision.Resource.ID, "active")
+			if s.lock {
+				query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+			}
+			if err := query.First(&scope).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fosite.ErrInvalidScope
+			} else if err != nil {
+				return nil, err
+			}
 		}
 		decision.Scopes = append(decision.Scopes, scope)
 		var grants []consent.Grant
-		if err := db.Where("user_id = ? AND client_id = ? AND resource = ? AND purpose_code = ? AND policy_version = ? AND status = ?", userID, req.GetClient().GetID(), decision.Resource.Identifier, scope.PurposeCode, scope.PolicyVersion, consent.Active).Order("granted_at DESC, id DESC").Find(&grants).Error; err != nil {
+		if err := db.Where("user_id = ? AND client_id = ? AND resource = ? AND purpose_code = ? AND policy_version = ? AND status = ?", userID, req.GetClient().GetID(), ConsentResource(scope, decision.Resource), scope.PurposeCode, scope.PolicyVersion, consent.Active).Order("granted_at DESC, id DESC").Find(&grants).Error; err != nil {
 			return nil, err
 		}
 		found := false
