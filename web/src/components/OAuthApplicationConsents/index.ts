@@ -1,0 +1,1 @@
+export { OAuthApplicationConsents } from './OAuthApplicationConsents'
