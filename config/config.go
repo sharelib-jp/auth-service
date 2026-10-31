@@ -19,8 +19,9 @@ type Config struct {
 	WEBAUTHN_RP_ORIGIN       string
 	DATABASE_DRIVER          string
 	DATABASE_DSN             string
-	Metadata                 Metadata    `toml:"METADATA"`
-	OAuth                    OAuthConfig `toml:"OAUTH"`
+	Metadata                 Metadata       `toml:"METADATA"`
+	BrandResources           BrandResources `toml:"BRANDRESOURCES"`
+	OAuth                    OAuthConfig    `toml:"OAUTH"`
 }
 
 // OAuth is opt-in. HMAC key material comes from the OAUTH_HMAC_SECRET
@@ -31,6 +32,18 @@ type OAuthConfig struct {
 	SigningKeyFile   string `toml:"SIGNING_KEY_FILE"`
 	SigningKeyID     string `toml:"SIGNING_KEY_ID"`
 	PreviousJWKSFile string `toml:"PREVIOUS_JWKS_FILE"`
+}
+
+type BrandResources struct {
+	Header     string `toml:"HEADER"`
+	HeaderLogo string `toml:"HEADER_LOGO"`
+}
+
+func (b BrandResources) HeaderPath() string {
+	if b.Header != "" {
+		return b.Header
+	}
+	return b.HeaderLogo
 }
 
 type Contact struct {

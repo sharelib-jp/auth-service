@@ -47,6 +47,7 @@ func NewRouter(conf *config.Config, db *gorm.DB) (*gin.Engine, error) {
 	}
 
 	s.registerRoutes(router.Group("/api"))
+	s.registerWellKnownRoutes(router.Group("/.well-known"))
 	if conf.OAuth.Enabled {
 		provider, err := newOAuthHandler(conf, db, service)
 		if err != nil {
@@ -64,6 +65,17 @@ func RegisterRoutes(api *gin.RouterGroup, service *Service, origin string) {
 	s.registerRoutes(api)
 }
 
+// RegisterWellKnownRoutes mounts the public metadata endpoints when embedding
+// the API in an existing Gin router. Mount group at /.well-known.
+func RegisterWellKnownRoutes(group *gin.RouterGroup, service *Service) {
+	(&handler{service: service}).registerWellKnownRoutes(group)
+}
+
+func (s *handler) registerWellKnownRoutes(group *gin.RouterGroup) {
+	group.GET("/nodeinfo", s.Nodeinfo)
+	group.GET("/header", s.BrandLogo)
+}
+
 func (s *handler) registerRoutes(api *gin.RouterGroup) {
 	api.GET("", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
@@ -73,9 +85,6 @@ func (s *handler) registerRoutes(api *gin.RouterGroup) {
 	api.POST("/auth/login/finish", s.finishLogin)
 	api.POST("/auth/logout", s.requireLogoutAuth, s.logout)
 	api.GET("/auth/oauth-session", s.oauthSessionStatus)
-
-	wellKnown := api.Group("/.well-known")
-	wellKnown.GET("/nodeinfo", s.Nodeinfo)
 
 	users := api.Group("/users/me", s.requireAuth)
 	users.GET("", s.getUser)

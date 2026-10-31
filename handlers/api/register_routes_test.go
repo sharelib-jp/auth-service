@@ -20,6 +20,12 @@ func TestRegisterRoutesWithSharedService(t *testing.T) {
 	}
 	router := gin.New()
 	RegisterRoutes(router.Group("/api"), service, testOrigin)
+	RegisterWellKnownRoutes(router.Group("/.well-known"), service)
+	metadata := httptest.NewRecorder()
+	router.ServeHTTP(metadata, httptest.NewRequest(http.MethodGet, testOrigin+"/.well-known/nodeinfo", nil))
+	if metadata.Code != http.StatusOK {
+		t.Fatalf("well-known status = %d, body = %s", metadata.Code, metadata.Body.String())
+	}
 	request := httptest.NewRequest(http.MethodGet, testOrigin+"/api/users/me", nil)
 	request.AddCookie(client.cookies[authCookie])
 	response := httptest.NewRecorder()

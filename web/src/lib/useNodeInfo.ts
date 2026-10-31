@@ -16,7 +16,7 @@ export type NodeInfo = {
 }
 
 export async function FetchNodeInfo(signal?: AbortSignal): Promise<NodeInfo> {
-  const response = await fetch('/api/.well-known/nodeinfo', {
+  const response = await fetch('/.well-known/nodeinfo', {
     signal,
   })
 

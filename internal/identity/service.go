@@ -10,9 +10,10 @@ import (
 
 // Service contains the authentication and profile operations shared by API and web handlers.
 type Service struct {
-	db       *gorm.DB
-	webAuthn *webauthn.WebAuthn
-	metadata config.Metadata
+	db             *gorm.DB
+	webAuthn       *webauthn.WebAuthn
+	metadata       config.Metadata
+	brandResources config.BrandResources
 }
 
 func NewService(conf *config.Config, db *gorm.DB) (*Service, error) {
@@ -23,10 +24,12 @@ func NewService(conf *config.Config, db *gorm.DB) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{db: db, webAuthn: wa, metadata: conf.Metadata}, nil
+	return &Service{db: db, webAuthn: wa, metadata: conf.Metadata, brandResources: conf.BrandResources}, nil
 }
 
 func (s *Service) Metadata() config.Metadata { return s.metadata }
+
+func (s *Service) BrandResources() config.BrandResources { return s.brandResources }
 
 var (
 	ErrInvalidInput    = errors.New("invalid input")
