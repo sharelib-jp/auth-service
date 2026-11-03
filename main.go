@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"time"
@@ -12,7 +13,10 @@ import (
 )
 
 func main() {
-	conf, err := config.LoadConfig("./config.toml")
+	configPath := flag.String("config", "./config.toml", "configuration file")
+	webDirectory := flag.String("web", "handlers/web/dist", "built frontend directory")
+	flag.Parse()
+	conf, err := config.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -31,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to initialize authentication: ", err)
 	}
-	web.Register(router, "handlers/web/dist")
+	web.Register(router, *webDirectory)
 
 	server := &http.Server{
 		Addr: conf.PORT, Handler: router,

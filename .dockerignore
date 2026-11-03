@@ -1,0 +1,16 @@
+.git
+.vscode
+**/node_modules
+**/.agents
+**/dist
+**/README.md
+**/config.toml
+.env
+.env.*
+**/*.pem
+**/*.key
+**/*.db
+**/*.db-*
+**/*.sqlite*
+docs
+deploy
