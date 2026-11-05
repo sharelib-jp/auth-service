@@ -1,7 +1,6 @@
 name: Container
 on:
   push:
-    branches: [master]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
