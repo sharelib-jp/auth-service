@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
+import { useMe } from '#/lib/useMe'
 
 const navigation = [
   { label: 'マイページ', href: '/' },
@@ -95,6 +96,7 @@ function HeaderLogo() {
 
 export default function HeaderComponent() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { data: me } = useMe()
 
   return (
     <header className="relative z-40 border-b bg-white text-solid-gray-900">
@@ -175,6 +177,17 @@ export default function HeaderComponent() {
             </div>
 
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {me?.Roles.includes('admin') && (
+                <li>
+                  <Link
+                    to="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="block border-b py-3 hover:text-blue-800 hover:underline"
+                  >
+                    管理者設定
+                  </Link>
+                </li>
+              )}
               {menuItems.map((item) => (
                 <li key={item.label}>
                   <Link

@@ -13,6 +13,7 @@ export type Me = {
   UserName: string
   Name: string
   Email: string
+  Roles: Array<string>
   CreatedAt: string
   UpdatedAt: string
 }

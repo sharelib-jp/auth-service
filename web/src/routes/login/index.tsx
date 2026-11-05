@@ -1,4 +1,5 @@
 import { Navigate, createFileRoute } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '#/atoms/Button'
 import { Heading, HeadingTitle } from '#/atoms/Heading'
 import { Divider } from '#/atoms/Divider'
@@ -18,6 +19,7 @@ type LoginUser = {
 }
 
 function LoginPageComponent() {
+  const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [user, setUser] = useState<LoginUser | null>(null)
@@ -98,6 +100,8 @@ function LoginPageComponent() {
       }
 
       const loggedInUser: LoginUser = await finishResponse.json()
+      await queryClient.cancelQueries()
+      queryClient.clear()
       if (oauthRequest) {
         window.location.replace(`/api/oauth2/continue?request=${oauthRequest}`)
         return

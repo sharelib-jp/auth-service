@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as RegisterRouteRouteImport } from './routes/register/route'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as LogoutIndexRouteImport } from './routes/logout/index'
@@ -23,6 +24,11 @@ import { Route as Oauth2V1AuthRouteImport } from './routes/oauth2/v1/auth'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRouteRoute = RegisterRouteRouteImport.update({
@@ -74,6 +80,7 @@ const Oauth2V1AuthRoute = Oauth2V1AuthRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/register': typeof RegisterRouteRouteWithChildren
+  '/admin': typeof AdminRoute
   '/me/consents': typeof MeConsentsRoute
   '/register/step1': typeof RegisterStep1Route
   '/register/step2': typeof RegisterStep2Route
@@ -86,6 +93,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/register': typeof RegisterRouteRouteWithChildren
+  '/admin': typeof AdminRoute
   '/me/consents': typeof MeConsentsRoute
   '/register/step1': typeof RegisterStep1Route
   '/register/step2': typeof RegisterStep2Route
@@ -99,6 +107,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/register': typeof RegisterRouteRouteWithChildren
+  '/admin': typeof AdminRoute
   '/me/consents': typeof MeConsentsRoute
   '/register/step1': typeof RegisterStep1Route
   '/register/step2': typeof RegisterStep2Route
@@ -113,6 +122,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/register'
+    | '/admin'
     | '/me/consents'
     | '/register/step1'
     | '/register/step2'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/register'
+    | '/admin'
     | '/me/consents'
     | '/register/step1'
     | '/register/step2'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/register'
+    | '/admin'
     | '/me/consents'
     | '/register/step1'
     | '/register/step2'
@@ -150,6 +162,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   RegisterRouteRoute: typeof RegisterRouteRouteWithChildren
+  AdminRoute: typeof AdminRoute
   MeConsentsRoute: typeof MeConsentsRoute
   LoginIndexRoute: typeof LoginIndexRoute
   LogoutIndexRoute: typeof LogoutIndexRoute
@@ -164,6 +177,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -251,6 +271,7 @@ const RegisterRouteRouteWithChildren = RegisterRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   RegisterRouteRoute: RegisterRouteRouteWithChildren,
+  AdminRoute: AdminRoute,
   MeConsentsRoute: MeConsentsRoute,
   LoginIndexRoute: LoginIndexRoute,
   LogoutIndexRoute: LogoutIndexRoute,

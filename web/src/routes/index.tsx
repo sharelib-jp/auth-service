@@ -1,5 +1,6 @@
 import { createFileRoute, redirect, Link } from '@tanstack/react-router'
 import { IdentificationComponent } from '#/components/Identification'
+import { useMe } from '#/lib/useMe'
 import {
   ProgressIndicator,
   ProgressIndicatorSpinner,
@@ -45,9 +46,18 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
+  const { data: me } = useMe()
   return (
     <div>
       <IdentificationComponent />
+      {me?.Roles.includes('admin') && (
+        <Link
+          to="/admin"
+          className="my-8 block rounded border border-gray-400 p-4 font-bold"
+        >
+          管理者設定（ユーザ・ロール・OAuth Client）
+        </Link>
+      )}
       <Link to="/me">
         <div className="flex items-center justify-between w-full min-h-16 p-4 rounded-4 border-gray-400 border my-8">
           <p className="font-bold">プロフィールの変更</p>
