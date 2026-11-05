@@ -24,7 +24,8 @@ type Service struct{ repo Repository }
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
 // Create accepts grants from a validated authorization flow, not directly
-// from untrusted request parameters. Authentication-only scopes are excluded.
+// from untrusted request parameters. Offline access requires a dedicated
+// identity-session grant and cannot be bundled with business-data scopes.
 func (s *Service) Create(ctx context.Context, grant Grant) (*Grant, error) {
 	if grant.UserID == uuid.Nil || strings.TrimSpace(grant.ClientID) == "" || strings.TrimSpace(grant.Resource) == "" || strings.TrimSpace(grant.PurposeCode) == "" || len(grant.Scopes) == 0 || grant.ConditionsVersion != 0 || len(grant.Conditions) != 0 {
 		return nil, ErrInvalidGrant
@@ -39,7 +40,10 @@ func (s *Service) Create(ctx context.Context, grant Grant) (*Grant, error) {
 	}
 	scopes := make(map[string]struct{}, len(grant.Scopes))
 	for _, scope := range grant.Scopes {
-		if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsAny(scope, " \t\r\n") || scope == "openid" || scope == "address" || scope == "phone" || scope == "offline_access" {
+		if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsAny(scope, " \t\r\n") || scope == "openid" || scope == "address" || scope == "phone" {
+			return nil, ErrInvalidGrant
+		}
+		if scope == "offline_access" && (len(grant.Scopes) != 1 || grant.Resource != IdentityResource || grant.PurposeCode != OfflineAccessPurpose) {
 			return nil, ErrInvalidGrant
 		}
 		scopes[scope] = struct{}{}

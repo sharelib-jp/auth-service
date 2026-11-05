@@ -7,7 +7,7 @@ import "time"
 type Client struct {
 	ID           string `gorm:"primaryKey"`
 	Name         string `gorm:"not null"`
-	SecretHash   []byte
+	SecretHash   []byte `json:"-"`
 	Public       bool
 	RedirectURIs []string `gorm:"serializer:json;not null"`
 	GrantTypes   []string `gorm:"serializer:json;not null"`

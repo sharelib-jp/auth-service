@@ -9,8 +9,10 @@ import (
 )
 
 const (
-	Active  = "active"
-	Revoked = "revoked"
+	Active               = "active"
+	Revoked              = "revoked"
+	IdentityResource     = "urn:auth-service:identity"
+	OfflineAccessPurpose = "oidc_session"
 )
 
 // Grant is an immutable permission snapshot, except for its revocation state.

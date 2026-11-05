@@ -367,3 +367,38 @@ func TestConcurrentConsentRevocationIsIdempotent(t *testing.T) {
 		t.Fatalf("token remained active: %v", err)
 	}
 }
+
+func TestLoginOnlyRefreshRequiresExplicitOfflineConsent(t *testing.T) {
+	store, service, db, request, _ := testStore(t)
+	request.GrantedScope = fosite.Arguments{"openid", "offline_access"}
+	request.RequestedScope = request.GrantedScope
+	request.GrantedAudience = nil
+	request.RequestedAudience = nil
+	session := request.GetSession().(*oauth.Session)
+	session.GrantIDs = nil
+	session.OfflineConsentRequired = true
+	if err := store.CreateRefreshTokenSession(t.Context(), "missing-offline-consent", "access", request); !errors.Is(err, fosite.ErrInvalidGrant) {
+		t.Fatalf("session refresh without its offline grant accepted: %v", err)
+	}
+	grant, err := service.Create(t.Context(), consent.Grant{UserID: uuid.MustParse(session.GetSubject()), ClientID: request.GetClient().GetID(), Resource: consent.IdentityResource, Scopes: []string{"offline_access"}, PurposeCode: consent.OfflineAccessPurpose})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.GrantIDs = []uuid.UUID{grant.ID}
+	if !session.Clone().(*oauth.Session).OfflineConsentRequired {
+		t.Fatal("session clone lost offline consent requirement")
+	}
+	if err := store.CreateRefreshTokenSession(t.Context(), "with-offline-consent", "access", request); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.GetRefreshTokenSession(t.Context(), "with-offline-consent", oauth.NewSession())
+	if err != nil || !loaded.GetSession().(*oauth.Session).OfflineConsentRequired {
+		t.Fatal("stored session lost offline consent requirement")
+	}
+	if err := db.Model(&consent.Grant{}).Where("id = ?", grant.ID).Update("expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetRefreshTokenSession(t.Context(), "with-offline-consent", oauth.NewSession()); !errors.Is(err, fosite.ErrNotFound) {
+		t.Fatalf("expired offline consent remained usable: %v", err)
+	}
+}

@@ -30,13 +30,14 @@ func (s *AuthorizationService) WithLocks() *AuthorizationService {
 }
 
 type ConsentDecision struct {
-	ClientName      string
-	OfflineAccess   bool
-	ExplicitConsent bool
-	Resource        Resource
-	Scopes          []Scope
-	GrantIDs        []uuid.UUID
-	Missing         []Scope
+	ClientName             string
+	OfflineAccess          bool
+	ExplicitConsent        bool
+	OfflineConsentRequired bool
+	Resource               Resource
+	Scopes                 []Scope
+	GrantIDs               []uuid.UUID
+	Missing                []Scope
 }
 
 func (s *AuthorizationService) Evaluate(ctx context.Context, req fosite.AuthorizeRequester, userID uuid.UUID) (*ConsentDecision, error) {
@@ -92,8 +93,13 @@ func (s *AuthorizationService) Evaluate(ctx context.Context, req fosite.Authoriz
 		return nil, fosite.ErrInvalidRequest
 	}
 	decision := &ConsentDecision{ClientName: client.Name, ExplicitConsent: form.Get("prompt") == "consent", OfflineAccess: req.GetRequestedScopes().Has("offline_access")}
-	if decision.OfflineAccess && !req.GetRequestedScopes().Has("openid") {
-		return nil, fosite.ErrInvalidScope
+	if decision.OfflineAccess {
+		if !req.GetRequestedScopes().Has("openid") {
+			return nil, fosite.ErrInvalidScope
+		}
+		if !fosite.Arguments(client.GrantTypes).Has("refresh_token") {
+			return nil, fosite.ErrUnauthorizedClient
+		}
 	}
 	var names []string
 	for _, name := range req.GetRequestedScopes() {
@@ -131,8 +137,10 @@ func (s *AuthorizationService) Evaluate(ctx context.Context, req fosite.Authoriz
 		}
 	}
 	if len(names) == 0 && decision.OfflineAccess {
-		// Refresh tokens must be tied to a revocable business-data consent.
-		return nil, fosite.ErrInvalidScope
+		// Login-only clients use their own revocable offline-access consent.
+		// Existing business grants retain their original consent semantics.
+		decision.OfflineConsentRequired = true
+		names = append(names, "offline_access")
 	}
 	for _, name := range []string{"profile", "email"} {
 		if req.GetRequestedScopes().Has(name) {

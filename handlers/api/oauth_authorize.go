@@ -333,6 +333,7 @@ func (h *oauthHandler) finishAuthorization(c *gin.Context, handle, browser, csrf
 		session := oauth.NewSession()
 		session.SetSubject(userID.String())
 		session.GrantIDs = grants
+		session.OfflineConsentRequired = decision.OfflineConsentRequired
 		session.IDTokenClaims().Subject = userID.String()
 		session.IDTokenClaims().AuthTime = authenticatedAt
 		session.IDTokenClaims().RequestedAt = req.GetRequestedAt()

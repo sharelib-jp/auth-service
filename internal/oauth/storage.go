@@ -224,6 +224,9 @@ func (s *Store) checkConsent(db *gorm.DB, req fosite.Requester, lock bool) error
 		}
 	}
 	for _, name := range scopeNames {
+		if name == "offline_access" && !session.OfflineConsentRequired {
+			continue
+		}
 		if scope, ok := identityScope(name); ok {
 			if !req.GetGrantedScopes().Has("openid") {
 				return fosite.ErrInvalidGrant

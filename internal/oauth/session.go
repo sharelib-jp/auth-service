@@ -12,6 +12,8 @@ import (
 type Session struct {
 	*openid.DefaultSession
 	GrantIDs []uuid.UUID `json:"grant_ids"`
+	// Absent on legacy business-token families, whose consent links remain valid.
+	OfflineConsentRequired bool `json:"offline_consent_required,omitempty"`
 }
 
 func NewSession() *Session { return &Session{DefaultSession: openid.NewDefaultSession()} }
@@ -24,5 +26,5 @@ func (s *Session) Clone() fosite.Session {
 	if s.DefaultSession != nil {
 		inner = s.DefaultSession.Clone().(*openid.DefaultSession)
 	}
-	return &Session{DefaultSession: inner, GrantIDs: append([]uuid.UUID(nil), s.GrantIDs...)}
+	return &Session{DefaultSession: inner, GrantIDs: append([]uuid.UUID(nil), s.GrantIDs...), OfflineConsentRequired: s.OfflineConsentRequired}
 }
