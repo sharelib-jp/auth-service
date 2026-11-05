@@ -51,6 +51,8 @@ func TestFrontendAndAPIRoutes(t *testing.T) {
 		{"GET", "/login/", "frontend", "text/html", 200, true},
 		{"GET", "/register/step2", "frontend", "text/html", 200, true},
 		{"GET", "/me/consents", "frontend", "text/html", 200, true},
+		{"GET", "/admin", "frontend", "text/html", 200, true},
+		{"GET", "/admin/", "frontend", "text/html", 200, true},
 		{"GET", "/oauth2/v1/auth?request=test", "frontend", "text/html", 200, true},
 		{"GET", "/index.html", "frontend", "text/html", 200, true},
 		{"GET", "/assets/app.js", "console.log", "javascript", 200, true},

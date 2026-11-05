@@ -17,6 +17,7 @@ func Register(router *gin.Engine, distDir string) {
 	pages := map[string]bool{
 		"/": true, "/login": true, "/logout": true,
 		"/me": true, "/me/consents": true,
+		"/admin":    true,
 		"/register": true, "/register/step1": true,
 		"/register/step2": true, "/register/step3": true,
 		"/oauth2/v1/auth": true,

@@ -15,6 +15,7 @@ import (
 	"github.com/sharelib-jp/auth-service/config"
 	"github.com/sharelib-jp/auth-service/internal/authorization"
 	"github.com/sharelib-jp/auth-service/internal/database"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 )
 
@@ -37,7 +38,7 @@ func run() error {
 		return err
 	}
 	if flags.NArg() != 1 {
-		return errors.New("expected one command: resource, scope, client, client-update, resource-credential, status, scope-policy, role-binding, or policy")
+		return errors.New("expected one command: resource, scope, client, client-update, resource-credential, status, scope-policy, role-binding, policy, or grant-admin")
 	}
 	conf, err := config.LoadConfig(*configPath)
 	if err != nil {
@@ -55,6 +56,14 @@ func run() error {
 	catalog := oauth.NewCatalog(db)
 	ctx := context.Background()
 	switch flags.Arg(0) {
+	case "grant-admin":
+		var in struct {
+			UserID uuid.UUID `json:"user_id"`
+		}
+		if err := decode(&in); err != nil {
+			return err
+		}
+		return identity.GrantAdmin(ctx, db, in.UserID, conf.HOSTNAME)
 	case "resource":
 		var in struct {
 			ID         string `json:"id"`

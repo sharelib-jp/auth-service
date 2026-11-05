@@ -36,6 +36,8 @@ var (
 	ErrConflict        = errors.New("conflict")
 	ErrUnauthenticated = errors.New("authentication required")
 	ErrInvalidPasskey  = errors.New("passkey login verification failed")
+	ErrForbidden       = errors.New("administrator role required")
+	ErrNotFound        = errors.New("not found")
 )
 
 type serviceError struct {

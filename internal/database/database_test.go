@@ -65,6 +65,13 @@ func TestOAuthMigrationPreservesExistingAuthentication(t *testing.T) {
 	if err != nil || session.User.ID != user.ID {
 		t.Fatalf("legacy session changed: %+v %v", session, err)
 	}
+	if len(session.User.Roles) != 0 {
+		t.Fatal("migration assigned privileges to an existing user")
+	}
+	var role identity.Role
+	if err := db.First(&role, "id = ?", identity.AdminRole).Error; err != nil || role.Name != "管理者" {
+		t.Fatalf("admin role was not seeded: %+v %v", role, err)
+	}
 	var stored identity.PasskeyCredential
 	if err := db.Where("user_id = ?", user.ID).First(&stored).Error; err != nil || stored.CredentialId != "legacy" {
 		t.Fatalf("legacy credential changed: %+v %v", stored, err)

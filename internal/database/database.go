@@ -49,12 +49,15 @@ func OpenWithDriver(driver, dsn string) (*gorm.DB, error) {
 	} else {
 		sqlDB.SetMaxOpenConns(10)
 	}
-	if err = db.AutoMigrate(&identity.User{}, &identity.UserAttributes{}, &identity.PasskeyCredential{}, &identity.LibraryIdSequence{}, &identity.CeremonySession{}, &identity.AuthSession{}, &consent.Grant{}, &consent.Event{}, &consent.SessionLink{}, &oauth.Client{}, &oauth.Resource{}, &oauth.Scope{}, &oauth.ResourceCredential{}, &oauth.SessionRecord{}, &oauth.SessionAudience{}, &oauth.AssertionJTI{}, &oauth.PendingAuthorization{}, &audit.Event{}, &audit.SecurityEvent{}, &authorization.RoleBinding{}, &authorization.Policy{}); err != nil {
+	if err = db.AutoMigrate(&identity.User{}, &identity.Role{}, &identity.UserRole{}, &identity.UserAttributes{}, &identity.PasskeyCredential{}, &identity.LibraryIdSequence{}, &identity.CeremonySession{}, &identity.AuthSession{}, &consent.Grant{}, &consent.Event{}, &consent.SessionLink{}, &oauth.Client{}, &oauth.Resource{}, &oauth.Scope{}, &oauth.ResourceCredential{}, &oauth.SessionRecord{}, &oauth.SessionAudience{}, &oauth.AssertionJTI{}, &oauth.PendingAuthorization{}, &audit.Event{}, &audit.SecurityEvent{}, &authorization.RoleBinding{}, &authorization.Policy{}); err != nil {
 		sqlDB.Close()
 		return nil, err
 	}
 	// Seed from existing users without ever resetting an allocated sequence.
 	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&identity.Role{ID: identity.AdminRole, Name: "管理者"}).Error; err != nil {
+			return err
+		}
 		var max int
 		if err := tx.Model(&identity.User{}).Select("COALESCE(MAX(library_id), 0)").Scan(&max).Error; err != nil {
 			return err

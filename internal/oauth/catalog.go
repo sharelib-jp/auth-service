@@ -116,7 +116,7 @@ func (c *Catalog) UpdateClient(ctx context.Context, client Client, secret string
 }
 
 func (c *Catalog) saveClient(ctx context.Context, client Client, secret string, update bool) error {
-	if !validCatalogID(client.ID) || strings.TrimSpace(client.Name) == "" || len(client.Name) > 200 || len(client.RedirectURIs) == 0 || len(client.RedirectURIs) > 50 || len(client.GrantTypes) == 0 || len(client.Scopes) == 0 || len(client.Scopes) > 100 || len(client.Audience) > 50 || (client.Public && secret != "") || (!client.Public && len(secret) < 32) {
+	if !validCatalogID(client.ID) || strings.TrimSpace(client.Name) == "" || len(client.Name) > 200 || len(client.RedirectURIs) == 0 || len(client.RedirectURIs) > 50 || len(client.GrantTypes) == 0 || len(client.Scopes) == 0 || len(client.Scopes) > 100 || len(client.Audience) > 50 || (client.Public && secret != "") || len(secret) > 72 || (!client.Public && (secret != "" || !update) && len(secret) < 32) {
 		return ErrInvalidRegistration
 	}
 	redirects := make(map[string]bool)
@@ -142,7 +142,8 @@ func (c *Catalog) saveClient(ctx context.Context, client Client, secret string, 
 	if !grants["authorization_code"] {
 		return ErrInvalidRegistration
 	}
-	if !client.Public {
+	client.SecretHash = nil
+	if !client.Public && secret != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(secret), 12)
 		if err != nil {
 			return err
@@ -156,6 +157,12 @@ func (c *Catalog) saveClient(ctx context.Context, client Client, secret string, 
 		if update {
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", client.ID).First(&existing).Error; err != nil {
 				return err
+			}
+			if !client.Public && secret == "" {
+				if existing.Public || len(existing.SecretHash) == 0 {
+					return ErrInvalidRegistration
+				}
+				client.SecretHash = existing.SecretHash
 			}
 		}
 		allowedResources := make(map[string]bool)

@@ -48,7 +48,10 @@ func UserExists(db *gorm.DB, userName, email string) (bool, error) {
 
 func FindUser(db *gorm.DB, userID uuid.UUID, rpID string) (*User, error) {
 	var user User
-	if err := db.Where("id = ? AND rp_id = ?", userID, rpID).First(&user).Error; err != nil {
+	if err := db.Session(&gorm.Session{}).Where("id = ? AND rp_id = ?", userID, rpID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	if err := LoadUserRoles(db, &user); err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -71,6 +74,9 @@ func FindPasskeyUser(db *gorm.DB, rpID string, rawID, userHandle []byte) (*User,
 		Where("id = ? AND rp_id = ? AND webauthn_handle = ?", stored.UserId, rpID, userHandle).
 		First(&user).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := LoadUserRoles(db, &user); err != nil {
 		return nil, err
 	}
 	return &user, nil

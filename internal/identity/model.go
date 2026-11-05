@@ -11,6 +11,9 @@ import (
 )
 
 func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+	if u.Roles == nil {
+		u.Roles = []string{}
+	}
 	if u.ID == uuid.Nil {
 		u.ID, err = uuid.NewV7()
 		if err != nil {
@@ -33,6 +36,7 @@ type User struct {
 	UserName       string              `gorm:"not null;uniqueIndex" json:"UserName"`
 	Name           string              `gorm:"not null" json:"Name"`
 	Email          string              `gorm:"not null;uniqueIndex" json:"Email"`
+	Roles          []string            `gorm:"-" json:"Roles"`
 	RPID           string              `gorm:"not null;uniqueIndex:idx_user_handle" json:"-"`
 	WebAuthnHandle []byte              `gorm:"column:webauthn_handle;not null;uniqueIndex:idx_user_handle" json:"-"`
 	Credentials    []PasskeyCredential `gorm:"foreignKey:UserId;constraint:OnDelete:CASCADE" json:"-"`

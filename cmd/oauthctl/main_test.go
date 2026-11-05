@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sharelib-jp/auth-service/internal/database"
+	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
 	"github.com/sharelib-jp/auth-service/internal/testdb"
 )
@@ -52,5 +53,14 @@ func TestOperatorRegistrationCommands(t *testing.T) {
 	var client oauth.Client
 	if err := db.First(&client, "id = ?", "c").Error; err != nil || client.Status != "disabled" {
 		t.Fatalf("client: %+v %v", client, err)
+	}
+	user := &identity.User{LibraryId: 1, UserName: "operator", Name: "Operator", Email: "operator@example.com", RPID: "localhost"}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatal(err)
+	}
+	invoke("grant-admin", fmt.Sprintf(`{"user_id":%q}`, user.ID))
+	invoke("grant-admin", fmt.Sprintf(`{"user_id":%q}`, user.ID))
+	if err := identity.LoadUserRoles(db, user); err != nil || !user.IsAdmin() {
+		t.Fatalf("admin was not granted: %+v %v", user.Roles, err)
 	}
 }

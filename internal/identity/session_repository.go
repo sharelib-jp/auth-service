@@ -56,6 +56,9 @@ func FindAuthSession(db *gorm.DB, tokenHash string) (*AuthSession, error) {
 	if err := db.Preload("User").Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&session).Error; err != nil {
 		return nil, err
 	}
+	if err := LoadUserRoles(db, &session.User); err != nil {
+		return nil, err
+	}
 	return &session, nil
 }
 

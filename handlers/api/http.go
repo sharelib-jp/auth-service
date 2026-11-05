@@ -79,6 +79,7 @@ func (s *handler) registerWellKnownRoutes(group *gin.RouterGroup) {
 }
 
 func (s *handler) registerRoutes(api *gin.RouterGroup) {
+	s.registerAdminRoutes(api)
 	api.GET("", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"message": "pong"}) })
 
 	api.POST("/auth/register/begin", s.beginRegistration)
@@ -150,6 +151,10 @@ func respondError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, identity.ErrConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, identity.ErrForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, identity.ErrNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, identity.ErrUnauthenticated), errors.Is(err, identity.ErrInvalidPasskey):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 	default:
