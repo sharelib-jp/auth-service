@@ -96,15 +96,20 @@ func run() error {
 			GrantTypes   []string `json:"grant_types"`
 			Scopes       []string `json:"scopes"`
 			Audience     []string `json:"audience"`
+			Secret       *string  `json:"secret"`
 		}
 		if err := decode(&in); err != nil {
 			return err
 		}
 		client := oauth.Client{ID: in.ID, Name: in.Name, Public: in.Public, RedirectURIs: in.RedirectURIs, GrantTypes: in.GrantTypes, Scopes: in.Scopes, Audience: in.Audience}
-		if flags.Arg(0) == "client-update" {
-			return catalog.UpdateClient(ctx, client, os.Getenv("OAUTH_CLIENT_SECRET"))
+		secret := os.Getenv("OAUTH_CLIENT_SECRET")
+		if in.Secret != nil {
+			secret = *in.Secret
 		}
-		return catalog.RegisterClient(ctx, client, os.Getenv("OAUTH_CLIENT_SECRET"))
+		if flags.Arg(0) == "client-update" {
+			return catalog.UpdateClient(ctx, client, secret)
+		}
+		return catalog.RegisterClient(ctx, client, secret)
 	case "resource-credential":
 		var in struct {
 			ID         string `json:"id"`

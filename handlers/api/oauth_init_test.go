@@ -41,8 +41,7 @@ func TestOAuthIssuerAndSigningKeyRotation(t *testing.T) {
 	if err := os.WriteFile(previousFile, previous, 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("OAUTH_HMAC_SECRET", base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("a", 32))))
-	conf := &config.Config{SCHEME: "https://", HOSTNAME: "another.example", PORT: ":443", WEBAUTHN_RP_ORIGIN: "https://another.example", OAuth: config.OAuthConfig{Enabled: true, Issuer: "https://another.example", SigningKeyFile: privateFile, SigningKeyID: "new", PreviousJWKSFile: previousFile}}
+	conf := &config.Config{SCHEME: "https://", HOSTNAME: "another.example", PORT: ":443", WEBAUTHN_RP_ORIGIN: "https://another.example", OAuth: config.OAuthConfig{HMACSecret: base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("a", 32))), Enabled: true, Issuer: "https://another.example", SigningKeyFile: privateFile, SigningKeyID: "new", PreviousJWKSFile: previousFile}}
 	handler, err := newOAuthHandler(conf, nil, nil)
 	if err != nil {
 		t.Fatal(err)

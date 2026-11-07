@@ -20,6 +20,9 @@ RP_ORIGIN = "https://auth-dev-sharelib.luca.hij1.local.sasakulab.com"
 [ DATABASE ]
 DATABASE_DRIVER = "postgres"
 DATABASE_DSN = "host=localhost port=5432 dbname=auth sslmode=disable"
+[ OAUTH ]
+HMAC_SECRET = "active-key"
+HMAC_PREVIOUS_SECRETS = ["old-key"]
 `
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
@@ -30,7 +33,8 @@ DATABASE_DSN = "host=localhost port=5432 dbname=auth sslmode=disable"
 	}
 	if conf.SCHEME != "http://" || conf.HOSTNAME != "auth-dev-sharelib.luca.hij1.local.sasakulab.com" || conf.PORT != ":8080" ||
 		conf.WEBAUTHN_RP_DISPLAY_NAME != conf.HOSTNAME || conf.Origin() != "https://"+conf.HOSTNAME ||
-		conf.DATABASE_DRIVER != "postgres" || conf.DATABASE_DSN != "host=localhost port=5432 dbname=auth sslmode=disable" {
+		conf.DATABASE_DRIVER != "postgres" || conf.DATABASE_DSN != "host=localhost port=5432 dbname=auth sslmode=disable" ||
+		conf.OAuth.HMACSecret != "active-key" || len(conf.OAuth.HMACPreviousSecrets) != 1 || conf.OAuth.HMACPreviousSecrets[0] != "old-key" {
 		t.Fatal("sectioned config was not loaded correctly")
 	}
 }

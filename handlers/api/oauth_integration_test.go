@@ -47,8 +47,7 @@ func oauthTestService(t *testing.T) (*testClient, *gorm.DB) {
 	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("OAUTH_HMAC_SECRET", base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
-	conf := &config.Config{SCHEME: "http://", HOSTNAME: "localhost", PORT: ":8080", WEBAUTHN_RP_DISPLAY_NAME: "Test", DATABASE_DRIVER: driver, DATABASE_DSN: dsn, OAuth: config.OAuthConfig{Enabled: true, Issuer: testOrigin, SigningKeyFile: keyFile, SigningKeyID: "test-key"}}
+	conf := &config.Config{SCHEME: "http://", HOSTNAME: "localhost", PORT: ":8080", WEBAUTHN_RP_DISPLAY_NAME: "Test", DATABASE_DRIVER: driver, DATABASE_DSN: dsn, OAuth: config.OAuthConfig{HMACSecret: base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("k", 32))), Enabled: true, Issuer: testOrigin, SigningKeyFile: keyFile, SigningKeyID: "test-key"}}
 	catalog := oauth.NewCatalog(db)
 	ctx := t.Context()
 	if err := catalog.RegisterResource(ctx, oauth.Resource{ID: "b", Identifier: "https://b.example/api", Name: "B"}); err != nil {

@@ -34,9 +34,9 @@ func newOAuthHandler(conf *config.Config, db *gorm.DB, service *identity.Service
 	if conf.OAuth.Issuer != conf.Origin() {
 		return nil, errors.New("OAuth issuer must match the configured authentication origin")
 	}
-	secret, err := base64.RawURLEncoding.DecodeString(os.Getenv("OAUTH_HMAC_SECRET"))
+	secret, err := base64.RawURLEncoding.DecodeString(conf.OAuth.HMACSecret)
 	if err != nil || len(secret) < 32 {
-		return nil, errors.New("OAUTH_HMAC_SECRET must be base64url-encoded and at least 32 bytes")
+		return nil, errors.New("OAUTH HMAC_SECRET must be base64url-encoded and at least 32 bytes")
 	}
 	data, err := os.ReadFile(conf.OAuth.SigningKeyFile)
 	if err != nil {
@@ -88,11 +88,11 @@ func newOAuthHandler(conf *config.Config, db *gorm.DB, service *identity.Service
 		}
 	}
 	var previousSecrets [][]byte
-	if encoded := os.Getenv("OAUTH_HMAC_PREVIOUS_SECRETS"); encoded != "" {
-		for _, entry := range strings.Split(encoded, ",") {
+	if len(conf.OAuth.HMACPreviousSecrets) > 0 {
+		for _, entry := range conf.OAuth.HMACPreviousSecrets {
 			decoded, err := base64.RawURLEncoding.DecodeString(entry)
 			if err != nil || len(decoded) < 32 {
-				return nil, errors.New("OAUTH_HMAC_PREVIOUS_SECRETS contains an invalid key")
+				return nil, errors.New("OAUTH HMAC_PREVIOUS_SECRETS contains an invalid key")
 			}
 			previousSecrets = append(previousSecrets, decoded)
 		}

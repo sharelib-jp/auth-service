@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/sharelib-jp/auth-service/internal/database"
 	"github.com/sharelib-jp/auth-service/internal/identity"
 	"github.com/sharelib-jp/auth-service/internal/oauth"
@@ -43,6 +45,8 @@ func TestOperatorRegistrationCommands(t *testing.T) {
 	invoke("resource", `{"id":"b","identifier":"https://b.example/api","name":"B"}`)
 	invoke("scope", `{"id":"read","resource_id":"b","name":"b.orders.read","description":"Read orders","purpose_code":"orders","policy_version":1}`)
 	invoke("client", `{"id":"c","name":"C","public":true,"redirect_uris":["https://c.example/callback"],"grant_types":["authorization_code"],"scopes":["openid","b.orders.read"],"audience":["https://b.example/api"]}`)
+	t.Setenv("OAUTH_CLIENT_SECRET", "environment-secret-that-must-not-be-used")
+	invoke("client", `{"id":"private","name":"Private","public":false,"redirect_uris":["https://c.example/callback"],"grant_types":["authorization_code"],"scopes":["openid"],"secret":"ssssssssssssssssssssssssssssssss"}`)
 	invoke("status", `{"kind":"client","id":"c","status":"disabled"}`)
 	db, err := database.OpenWithDriver(driver, dsn)
 	if err != nil {
@@ -53,6 +57,13 @@ func TestOperatorRegistrationCommands(t *testing.T) {
 	var client oauth.Client
 	if err := db.First(&client, "id = ?", "c").Error; err != nil || client.Status != "disabled" {
 		t.Fatalf("client: %+v %v", client, err)
+	}
+	var confidential oauth.Client
+	if err := db.First(&confidential, "id = ?", "private").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := bcrypt.CompareHashAndPassword(confidential.SecretHash, []byte("ssssssssssssssssssssssssssssssss")); err != nil {
+		t.Fatal("client JSON secret was not registered")
 	}
 	user := &identity.User{LibraryId: 1, UserName: "operator", Name: "Operator", Email: "operator@example.com", RPID: "localhost"}
 	if err := db.Create(user).Error; err != nil {

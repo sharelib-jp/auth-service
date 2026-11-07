@@ -24,14 +24,15 @@ type Config struct {
 	OAuth                    OAuthConfig    `toml:"OAUTH"`
 }
 
-// OAuth is opt-in. HMAC key material comes from the OAUTH_HMAC_SECRET
-// environment variable, encoded using unpadded base64url.
+// OAuth is opt-in. HMAC keys use unpadded base64url encoding.
 type OAuthConfig struct {
-	Enabled          bool   `toml:"ENABLED"`
-	Issuer           string `toml:"ISSUER"`
-	SigningKeyFile   string `toml:"SIGNING_KEY_FILE"`
-	SigningKeyID     string `toml:"SIGNING_KEY_ID"`
-	PreviousJWKSFile string `toml:"PREVIOUS_JWKS_FILE"`
+	HMACSecret          string   `toml:"HMAC_SECRET"`
+	HMACPreviousSecrets []string `toml:"HMAC_PREVIOUS_SECRETS"`
+	Enabled             bool     `toml:"ENABLED"`
+	Issuer              string   `toml:"ISSUER"`
+	SigningKeyFile      string   `toml:"SIGNING_KEY_FILE"`
+	SigningKeyID        string   `toml:"SIGNING_KEY_ID"`
+	PreviousJWKSFile    string   `toml:"PREVIOUS_JWKS_FILE"`
 }
 
 type BrandResources struct {
