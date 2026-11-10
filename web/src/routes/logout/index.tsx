@@ -28,7 +28,11 @@ function LogoutPage() {
     setState('pending')
     try {
       await logout()
-      queryClient.clear()
+      await queryClient.cancelQueries()
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] !== 'me',
+      })
+      await queryClient.resetQueries({ queryKey: ['me'] })
       setState('success')
     } catch {
       setState('error')
