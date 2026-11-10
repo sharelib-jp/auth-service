@@ -101,7 +101,10 @@ function LoginPageComponent() {
 
       const loggedInUser: LoginUser = await finishResponse.json()
       await queryClient.cancelQueries()
-      queryClient.clear()
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] !== 'me',
+      })
+      await queryClient.resetQueries({ queryKey: ['me'] })
       if (oauthRequest) {
         window.location.replace(`/api/oauth2/continue?request=${oauthRequest}`)
         return

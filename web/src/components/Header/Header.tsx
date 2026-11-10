@@ -96,7 +96,13 @@ function HeaderLogo() {
 
 export default function HeaderComponent() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const { data: me } = useMe()
+  const { data: me, isSuccess } = useMe()
+
+  useEffect(() => {
+    if (!isSuccess) {
+      setMenuOpen(false)
+    }
+  }, [isSuccess])
 
   return (
     <header className="relative z-40 border-b bg-white text-solid-gray-900">
@@ -115,23 +121,24 @@ export default function HeaderComponent() {
           className="flex items-center gap-2"
         >
           <div className="hidden items-center lg:flex">
-            {navigation.map((item, index) => (
-              <div key={item.label} className="flex items-center">
-                {index === 3 && (
-                  <span
-                    aria-hidden="true"
-                    className="mx-3 h-5 border-l border-gray-400"
-                  />
-                )}
-                <Link
-                  to={item.href}
-                  className="px-3 py-3
-                             hover:text-blue-800 hover:underline"
-                >
-                  {item.label}
-                </Link>
-              </div>
-            ))}
+            {isSuccess &&
+              navigation.map((item, index) => (
+                <div key={item.label} className="flex items-center">
+                  {index === 3 && (
+                    <span
+                      aria-hidden="true"
+                      className="mx-3 h-5 border-l border-gray-400"
+                    />
+                  )}
+                  <Link
+                    to={item.href}
+                    className="px-3 py-3
+                               hover:text-blue-800 hover:underline"
+                  >
+                    {item.label}
+                  </Link>
+                </div>
+              ))}
           </div>
 
           {/* <Link to="/" className="hidden px-3 py-3 hover:underline lg:block">
@@ -139,21 +146,23 @@ export default function HeaderComponent() {
           </Link> */}
 
           {/* すべてのメニュー */}
-          <button
-            type="button"
-            aria-expanded={menuOpen}
-            aria-controls="site-menu"
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 px-3 py-3 hover:bg-gray-100"
-          >
-            <span aria-hidden="true">{menuOpen ? '✕' : '☰'}</span>
-            <span>{menuOpen ? 'メニューを閉じる' : 'すべてのメニュー'}</span>
-          </button>
+          {isSuccess && (
+            <button
+              type="button"
+              aria-expanded={menuOpen}
+              aria-controls="site-menu"
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="flex items-center gap-2 px-3 py-3 hover:bg-gray-100"
+            >
+              <span aria-hidden="true">{menuOpen ? '✕' : '☰'}</span>
+              <span>{menuOpen ? 'メニューを閉じる' : 'すべてのメニュー'}</span>
+            </button>
+          )}
         </nav>
       </div>
 
       {/* 展開メニュー */}
-      {menuOpen && (
+      {isSuccess && menuOpen && (
         <div
           id="site-menu"
           className="absolute left-0 right-0 top-full
@@ -164,20 +173,21 @@ export default function HeaderComponent() {
               <Link to="/" onClick={() => setMenuOpen(false)}>
                 検索
               </Link>
-              {navigation.map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {isSuccess &&
+                navigation.map((item) => (
+                  <Link
+                    key={item.label}
+                    to={item.href}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
               <LanguageSelector />
             </div>
 
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {me?.Roles.includes('admin') && (
+              {isSuccess && me?.Roles.includes('admin') && (
                 <li>
                   <Link
                     to="/admin"
